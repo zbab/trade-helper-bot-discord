@@ -2,7 +2,8 @@ import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
-from market_analysis import BinanceMarketAnalyzer, format_symbol
+from market_analysis import BinanceMarketAnalyzer
+from crypto_manager import CryptoManager
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -13,8 +14,9 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='/', intents=intents)
 
-# Initialiser l'analyseur de marché
+# Initialiser l'analyseur de marché et le gestionnaire de cryptos
 analyzer = BinanceMarketAnalyzer()
+crypto_manager = CryptoManager()
 
 # Supprimer la commande help par défaut pour créer la nôtre
 bot.remove_command('help')
@@ -23,6 +25,7 @@ bot.remove_command('help')
 async def on_ready():
     print(f'{bot.user} est connecté!')
     print(f'Serveurs: {len(bot.guilds)}')
+    print(f'Cryptos supportées: {", ".join(crypto_manager.get_crypto_symbols())}')
 
 # ============================================================================
 # COMMANDES DE CALCUL EXISTANTES
@@ -261,30 +264,34 @@ async def dca(
         await ctx.respond(f"❌ Erreur: {str(e)}")
 
 # ============================================================================
-# NOUVELLES COMMANDES - ANALYSE DE MOYENNES MOBILES
+# COMMANDES D'ANALYSE DE MOYENNES MOBILES
 # ============================================================================
 
-@bot.slash_command(name="ma_check", description="Vérifier l'état des moyennes mobiles (BTC ou ETH)")
+async def crypto_autocomplete(ctx: discord.AutocompleteContext):
+    """Autocomplétion pour les cryptos disponibles"""
+    return crypto_manager.get_crypto_symbols()
+
+@bot.slash_command(name="ma_check", description="Vérifier l'état des moyennes mobiles")
 async def ma_check(
     ctx,
     crypto: str = discord.Option(
         str,
         description="Crypto à analyser",
-        choices=["BTC", "ETH"]
+        autocomplete=crypto_autocomplete
     )
 ):
     await ctx.defer()
     
     # Convertir en symbole Binance
-    symbol = format_symbol(crypto)
+    binance_symbol = crypto_manager.get_binance_symbol(crypto)
     
-    if not symbol:
-        await ctx.respond("❌ Crypto non supportée! Utilisez BTC ou ETH.")
+    if not binance_symbol:
+        await ctx.respond(f"❌ Crypto '{crypto}' non supportée! Utilisez `/crypto_list` pour voir les cryptos disponibles.")
         return
     
     try:
         # Analyser le symbole
-        analysis = analyzer.analyze_symbol(symbol)
+        analysis = analyzer.analyze_symbol(binance_symbol)
         
         if analysis['status'] != 'success':
             await ctx.respond(f"❌ Erreur: {analysis.get('message', 'Erreur inconnue')}")
@@ -306,7 +313,7 @@ async def ma_check(
         
         # Créer l'embed
         embed = discord.Embed(
-            title=f"📊 Analyse Moyennes Mobiles - {crypto}",
+            title=f"📊 Analyse Moyennes Mobiles - {crypto.upper()}",
             description=f"**{status_emoji} {status_text}**",
             color=color
         )
@@ -399,78 +406,194 @@ async def ma_check(
     except Exception as e:
         await ctx.respond(f"❌ Erreur lors de l'analyse: {str(e)}")
 
-@bot.slash_command(name="ma_compare", description="Comparer BTC et ETH")
+@bot.slash_command(name="ma_compare", description="Comparer toutes les cryptos")
 async def ma_compare(ctx):
     await ctx.defer()
     
     try:
-        # Analyser BTC et ETH
-        btc_analysis = analyzer.analyze_symbol('BTCUSDT')
-        eth_analysis = analyzer.analyze_symbol('ETHUSDT')
+        cryptos = crypto_manager.get_all_cryptos()
         
-        if btc_analysis['status'] != 'success' or eth_analysis['status'] != 'success':
-            await ctx.respond("❌ Erreur lors de l'analyse")
+        if len(cryptos) == 0:
+            await ctx.respond("❌ Aucune crypto configurée!")
             return
         
         embed = discord.Embed(
-            title="📊 Comparaison BTC vs ETH",
+            title="📊 Comparaison des Cryptos",
             color=discord.Color.blue()
         )
         
-        # BTC
-        btc_status = "🟢 Haussier" if btc_analysis['aligned_bullish'] else "🔴 Baissier" if btc_analysis['aligned_bearish'] else "🟠 Neutre"
-        btc_compression = "🔥 OUI" if btc_analysis['is_compressed'] else "Non"
+        alerts = []
         
-        embed.add_field(
-            name="₿ BITCOIN",
-            value=f"Prix: ${btc_analysis['current_price']:,.2f}\n"
-                  f"Alignement: {btc_status}\n"
-                  f"Compression: {btc_compression}\n"
-                  f"Écart MA: {btc_analysis['compression_pct']:.2f}%",
-            inline=True
-        )
+        for symbol, binance_symbol in cryptos.items():
+            try:
+                analysis = analyzer.analyze_symbol(binance_symbol)
+                
+                if analysis['status'] != 'success':
+                    embed.add_field(
+                        name=f"❌ {symbol}",
+                        value="Erreur d'analyse",
+                        inline=True
+                    )
+                    continue
+                
+                # Statut
+                if analysis['aligned_bullish']:
+                    status = "🟢 Haussier"
+                    if analysis['is_compressed']:
+                        alerts.append(f"{symbol}: Haussier + Compression!")
+                elif analysis['aligned_bearish']:
+                    status = "🔴 Baissier"
+                    if analysis['is_compressed']:
+                        alerts.append(f"{symbol}: Baissier + Compression!")
+                else:
+                    status = "🟠 Neutre"
+                
+                compression = "🔥 OUI" if analysis['is_compressed'] else "Non"
+                
+                embed.add_field(
+                    name=f"{symbol}",
+                    value=f"Prix: ${analysis['current_price']:,.2f}\n"
+                          f"Alignement: {status}\n"
+                          f"Compression: {compression}\n"
+                          f"Écart: {analysis['compression_pct']:.2f}%",
+                    inline=True
+                )
+                
+            except Exception as e:
+                embed.add_field(
+                    name=f"❌ {symbol}",
+                    value=f"Erreur: {str(e)[:50]}",
+                    inline=True
+                )
         
-        # ETH
-        eth_status = "🟢 Haussier" if eth_analysis['aligned_bullish'] else "🔴 Baissier" if eth_analysis['aligned_bearish'] else "🟠 Neutre"
-        eth_compression = "🔥 OUI" if eth_analysis['is_compressed'] else "Non"
+        # Ajouter les alertes
+        if alerts:
+            embed.add_field(
+                name="🔥 ALERTES",
+                value="\n".join(alerts),
+                inline=False
+            )
         
-        embed.add_field(
-            name="⟠ ETHEREUM",
-            value=f"Prix: ${eth_analysis['current_price']:,.2f}\n"
-                  f"Alignement: {eth_status}\n"
-                  f"Compression: {eth_compression}\n"
-                  f"Écart MA: {eth_analysis['compression_pct']:.2f}%",
-            inline=True
-        )
-        
-        # Résumé
-        both_bullish = btc_analysis['aligned_bullish'] and eth_analysis['aligned_bullish']
-        both_bearish = btc_analysis['aligned_bearish'] and eth_analysis['aligned_bearish']
-        both_compressed = btc_analysis['is_compressed'] and eth_analysis['is_compressed']
-        
-        summary = ""
-        if both_bullish:
-            summary = "🟢 Les deux sont alignés HAUSSIER!"
-        elif both_bearish:
-            summary = "🔴 Les deux sont alignés BAISSIER!"
-        else:
-            summary = "🟠 Alignements divergents"
-        
-        if both_compressed:
-            summary += "\n🔥 COMPRESSION DÉTECTÉE SUR LES DEUX!"
-        
-        embed.add_field(
-            name="📋 Résumé",
-            value=summary,
-            inline=False
-        )
-        
-        embed.set_footer(text="💡 Utilisez /ma_check pour plus de détails")
+        embed.set_footer(text=f"💡 {len(cryptos)} crypto(s) analysée(s)")
         
         await ctx.respond(embed=embed)
         
     except Exception as e:
         await ctx.respond(f"❌ Erreur: {str(e)}")
+
+# ============================================================================
+# COMMANDES DE GESTION DES CRYPTOS (NOUVEAU)
+# ============================================================================
+
+@bot.slash_command(name="crypto_list", description="Lister toutes les cryptos supportées")
+async def crypto_list(ctx):
+    await ctx.defer()
+    
+    cryptos = crypto_manager.get_all_cryptos()
+    
+    if len(cryptos) == 0:
+        await ctx.respond("❌ Aucune crypto configurée!")
+        return
+    
+    embed = discord.Embed(
+        title="📋 Cryptos Supportées",
+        description=f"Total: {len(cryptos)} crypto(s)",
+        color=discord.Color.blue()
+    )
+    
+    # Lister les cryptos
+    crypto_text = ""
+    for symbol, binance_symbol in sorted(cryptos.items()):
+        crypto_text += f"**{symbol}** → `{binance_symbol}`\n"
+    
+    embed.add_field(
+        name="Liste",
+        value=crypto_text,
+        inline=False
+    )
+    
+    embed.set_footer(text="💡 Utilisez /crypto_add pour ajouter une crypto")
+    
+    await ctx.respond(embed=embed)
+
+@bot.slash_command(name="crypto_add", description="Ajouter une nouvelle crypto")
+async def crypto_add(
+    ctx,
+    symbol: str = discord.Option(str, description="Symbole court (ex: BTC, SOL, DOGE)"),
+    binance_symbol: str = discord.Option(str, description="Symbole Binance (ex: BTCUSDT, SOLUSDT)")
+):
+    await ctx.defer()
+    
+    symbol = symbol.upper().strip()
+    binance_symbol = binance_symbol.upper().strip()
+    
+    # Validation du format
+    if not crypto_manager.validate_binance_symbol(binance_symbol):
+        await ctx.respond(
+            "❌ Symbole Binance invalide!\n"
+            "Le symbole doit se terminer par: USDT, BUSD, BTC, ou ETH\n"
+            "Exemples: `BTCUSDT`, `SOLUSDT`, `DOGEUSDT`"
+        )
+        return
+    
+    # Vérifier si existe déjà
+    if crypto_manager.crypto_exists(symbol):
+        await ctx.respond(f"❌ La crypto `{symbol}` existe déjà!")
+        return
+    
+    # Tester si le symbole existe sur Binance
+    await ctx.respond("🔄 Vérification du symbole sur Binance...")
+    
+    if not analyzer.test_symbol_exists(binance_symbol):
+        await ctx.edit(
+            content=f"❌ Le symbole `{binance_symbol}` n'existe pas sur Binance!\n"
+                   f"Vérifiez l'orthographe ou consultez: https://www.binance.com/en/markets"
+        )
+        return
+    
+    # Ajouter la crypto
+    if crypto_manager.add_crypto(symbol, binance_symbol):
+        embed = discord.Embed(
+            title="✅ Crypto Ajoutée",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Symbole", value=symbol, inline=True)
+        embed.add_field(name="Binance", value=binance_symbol, inline=True)
+        embed.set_footer(text=f"Total: {crypto_manager.get_count()} crypto(s)")
+        
+        await ctx.edit(content=None, embed=embed)
+    else:
+        await ctx.edit(content="❌ Erreur lors de l'ajout")
+
+@bot.slash_command(name="crypto_remove", description="Supprimer une crypto")
+async def crypto_remove(
+    ctx,
+    crypto: str = discord.Option(
+        str,
+        description="Crypto à supprimer",
+        autocomplete=crypto_autocomplete
+    )
+):
+    await ctx.defer()
+    
+    crypto = crypto.upper().strip()
+    
+    if not crypto_manager.crypto_exists(crypto):
+        await ctx.respond(f"❌ La crypto `{crypto}` n'existe pas!")
+        return
+    
+    # Supprimer
+    if crypto_manager.remove_crypto(crypto):
+        embed = discord.Embed(
+            title="✅ Crypto Supprimée",
+            description=f"La crypto **{crypto}** a été supprimée",
+            color=discord.Color.orange()
+        )
+        embed.set_footer(text=f"Total: {crypto_manager.get_count()} crypto(s) restante(s)")
+        
+        await ctx.respond(embed=embed)
+    else:
+        await ctx.respond("❌ Erreur lors de la suppression")
 
 @bot.slash_command(name="help", description="Afficher toutes les commandes disponibles")
 async def help_command(ctx):
@@ -496,9 +619,20 @@ async def help_command(ctx):
     embed.add_field(
         name="📊 Analyse Technique",
         value=(
-            "`/ma_check <BTC|ETH>` - Analyser les moyennes mobiles\n"
-            "`/ma_compare` - Comparer BTC et ETH\n"
+            "`/ma_check <crypto>` - Analyser les moyennes mobiles\n"
+            "`/ma_compare` - Comparer toutes les cryptos\n"
             "```Moyennes: MA112, MA336, MA375, MA448, MA750```"
+        ),
+        inline=False
+    )
+    
+    # Gestion des cryptos
+    embed.add_field(
+        name="🔧 Gestion des Cryptos",
+        value=(
+            "`/crypto_list` - Lister les cryptos supportées\n"
+            "`/crypto_add` - Ajouter une crypto\n"
+            "`/crypto_remove` - Supprimer une crypto"
         ),
         inline=False
     )
@@ -513,7 +647,7 @@ async def help_command(ctx):
         inline=False
     )
     
-    embed.set_footer(text="💡 Toutes les données proviennent de Binance")
+    embed.set_footer(text=f"💡 {crypto_manager.get_count()} crypto(s) configurée(s) | Données: Binance")
     
     await ctx.respond(embed=embed)
 
