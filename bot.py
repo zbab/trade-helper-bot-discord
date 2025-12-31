@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
+from market_analysis import BinanceMarketAnalyzer, format_symbol
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -9,644 +10,517 @@ load_dotenv()
 # Créer le bot avec les intents nécessaires
 intents = discord.Intents.default()
 intents.message_content = True
-bot = discord.Bot(intents=intents)
+
+bot = commands.Bot(command_prefix='/', intents=intents)
+
+# Initialiser l'analyseur de marché
+analyzer = BinanceMarketAnalyzer()
+
+# Supprimer la commande help par défaut pour créer la nôtre
+bot.remove_command('help')
 
 @bot.event
 async def on_ready():
-    print(f'✅ {bot.user} est connecté et prêt !')
-    print(f'📊 Connecté à {len(bot.guilds)} serveur(s)')
-    print('🔄 Synchronisation des commandes...')
-    await bot.sync_commands()
-    print('✅ Commandes synchronisées !')
+    print(f'{bot.user} est connecté!')
+    print(f'Serveurs: {len(bot.guilds)}')
 
-# ==========================================
-# CALCULATEUR 1 : TAILLE DE POSITION (avec RR intégré)
-# ==========================================
+# ============================================================================
+# COMMANDES DE CALCUL EXISTANTES
+# ============================================================================
 
-@bot.slash_command(
-    name="position",
-    description="Calcule la taille de position optimale selon votre risque (+ ratio R/R si target fournie)"
-)
+@bot.slash_command(name="position", description="Calculer la taille d'une position spot")
 async def position(
     ctx,
-    capital: discord.Option(float, "Capital total disponible (ex: 10000)", required=True),
-    risk_percent: discord.Option(float, "Pourcentage de risque par trade (ex: 2 pour 2%)", required=True),
-    entry: discord.Option(float, "Prix d'entrée prévu", required=True),
-    stop_loss: discord.Option(float, "Prix du stop loss", required=True),
-    target: discord.Option(float, "Prix cible (take profit) - OPTIONNEL pour calcul R/R", required=False, default=None)
+    capital: float = discord.Option(float, description="Capital à risquer ($)"),
+    entry: float = discord.Option(float, description="Prix d'entrée"),
+    stop_loss: float = discord.Option(float, description="Prix du stop loss"),
+    take_profit: float = discord.Option(float, description="Prix du take profit (optionnel)", required=False, default=None)
 ):
-    # ⚡ AJOUT : Différer la réponse pour éviter le timeout
     await ctx.defer()
     
-    try:
-        # Validation des inputs
-        if capital <= 0:
-            await ctx.respond("❌ Le capital doit être positif !", ephemeral=True)
-            return
-        if risk_percent <= 0 or risk_percent > 100:
-            await ctx.respond("❌ Le pourcentage de risque doit être entre 0 et 100 !", ephemeral=True)
-            return
-        if entry <= 0 or stop_loss <= 0:
-            await ctx.respond("❌ Les prix doivent être positifs !", ephemeral=True)
-            return
+    if capital <= 0 or entry <= 0 or stop_loss <= 0:
+        await ctx.respond("❌ Toutes les valeurs doivent être positives!")
+        return
+    
+    if entry == stop_loss:
+        await ctx.respond("❌ Le prix d'entrée et le stop loss ne peuvent pas être identiques!")
+        return
+    
+    # Déterminer si c'est un LONG ou SHORT
+    is_long = entry > stop_loss
+    
+    # Calculer le risque par unité
+    risk_per_unit = abs(entry - stop_loss)
+    risk_percent = (risk_per_unit / entry) * 100
+    
+    # Calculer la quantité
+    quantity = capital / risk_per_unit
+    
+    # Calculer la valeur totale de la position
+    position_value = quantity * entry
+    
+    # Calculer le R/R si take profit fourni
+    rr_info = ""
+    if take_profit and take_profit > 0:
+        reward_per_unit = abs(take_profit - entry)
+        rr_ratio = reward_per_unit / risk_per_unit
+        potential_profit = quantity * reward_per_unit
         
-        # Calculs de base
-        risk_amount = capital * (risk_percent / 100)
-        risk_per_share = abs(entry - stop_loss)
-        
-        if risk_per_share == 0:
-            await ctx.respond("❌ Le prix d'entrée et le stop loss ne peuvent pas être identiques !", ephemeral=True)
-            return
-        
-        position_size = risk_amount / risk_per_share
-        investment = position_size * entry
-        
-        # Déterminer si c'est un long ou short
-        is_long = stop_loss < entry
-        position_type = "LONG 📈" if is_long else "SHORT 📉"
-        color = discord.Color.green() if is_long else discord.Color.red()
-        
-        # === CALCUL DU RATIO R/R SI TARGET FOURNIE ===
-        rr_ratio = None
-        reward_amount = None
-        rr_verdict = None
-        
-        if target is not None:
-            if target <= 0:
-                await ctx.followup.send("❌ Le prix cible doit être positif !", ephemeral=True)
-                return
-            
-            # Vérifier la cohérence de la target
-            target_valid = (is_long and target > entry) or (not is_long and target < entry)
-            
-            if not target_valid:
-                await ctx.followup.send(
-                    "❌ Configuration invalide !\n"
-                    f"💡 Pour un {'LONG' if is_long else 'SHORT'}, "
-                    f"la target doit être {'au-dessus' if is_long else 'en-dessous'} de l'entrée.",
-                    ephemeral=True
-                )
-                return
-            
-            # Calcul du R/R
-            reward = abs(target - entry)
-            rr_ratio = reward / risk_per_share
-            reward_amount = reward * position_size
-            
-            # Verdict selon le ratio
-            if rr_ratio >= 3:
-                rr_verdict = "✅ Excellent ratio !"
-                color = discord.Color.green()
-            elif rr_ratio >= 2:
-                rr_verdict = "👍 Bon ratio"
-                color = discord.Color.blue()
-            elif rr_ratio >= 1:
-                rr_verdict = "⚠️ Ratio acceptable"
-                color = discord.Color.gold()
-            else:
-                rr_verdict = "❌ Ratio défavorable"
-                color = discord.Color.red()
-        
-        # Créer l'embed
-        title = "💰 Calculateur de Position" + (" + Ratio R/R" if target else "")
-        embed = discord.Embed(
-            title=title,
-            description=f"**Type de position : {position_type}**",
-            color=color
-        )
-        
-        embed.add_field(
-            name="📊 Paramètres",
-            value=f"```\nCapital total    : ${capital:,.2f}\nRisque accepté   : {risk_percent}%\nMontant à risquer: ${risk_amount:,.2f}```",
-            inline=False
-        )
-        
-        # Prix avec ou sans target
-        if target:
-            embed.add_field(
-                name="📍 Prix",
-                value=f"```\nEntrée       : ${entry:,.2f}\nStop Loss    : ${stop_loss:,.2f}\nTarget       : ${target:,.2f}\nRisque/unité : ${risk_per_share:,.2f}```",
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="📍 Prix",
-                value=f"```\nEntrée       : ${entry:,.2f}\nStop Loss    : ${stop_loss:,.2f}\nRisque/unité : ${risk_per_share:,.2f}```",
-                inline=False
-            )
-        
-        embed.add_field(
-            name="✅ Position à Prendre",
-            value=f"```\n🎯 Taille position : {position_size:,.2f} unités\n💵 Investissement  : ${investment:,.2f}\n📉 Perte maximale  : ${risk_amount:,.2f} ({risk_percent}%)```",
-            inline=False
-        )
-        
-        # Afficher le R/R si calculé
-        if rr_ratio is not None:
-            embed.add_field(
-                name="⚖️ Ratio Risque/Rendement",
-                value=f"```\n🎯 Ratio R/R      : {rr_ratio:.2f}:1\n💰 Gain potentiel : ${reward_amount:,.2f}\n\n{rr_verdict}```",
-                inline=False
-            )
-            
-            embed.add_field(
-                name="💡 Interprétation",
-                value=f"Pour chaque $1 risqué, vous pouvez gagner ${rr_ratio:.2f}",
-                inline=False
-            )
-        
-        footer_text = "💡 Ajoutez target:XX pour calculer le ratio R/R" if not target else "💡 Un ratio ≥ 2:1 est recommandé"
-        embed.set_footer(text=footer_text)
-        
-        # ⚡ CHANGEMENT : Utiliser followup au lieu de respond
-        await ctx.followup.send(embed=embed)
-        
-    except Exception as e:
-        await ctx.followup.send(f"❌ Erreur lors du calcul : {str(e)}", ephemeral=True)
+        rr_info = f"\n**Ratio R/R:** {rr_ratio:.2f}\n**Profit potentiel:** ${potential_profit:,.2f}"
+    
+    # Créer l'embed
+    embed = discord.Embed(
+        title="📊 Calcul de Position Spot",
+        color=discord.Color.green() if is_long else discord.Color.red()
+    )
+    
+    embed.add_field(name="Type", value=f"{'🟢 LONG' if is_long else '🔴 SHORT'}", inline=False)
+    embed.add_field(name="Capital risqué", value=f"${capital:,.2f}", inline=True)
+    embed.add_field(name="Prix d'entrée", value=f"${entry:,.4f}", inline=True)
+    embed.add_field(name="Stop Loss", value=f"${stop_loss:,.4f}", inline=True)
+    embed.add_field(name="Risque par unité", value=f"${risk_per_unit:,.4f} ({risk_percent:.2f}%)", inline=True)
+    embed.add_field(name="Quantité à acheter", value=f"{quantity:,.4f}", inline=True)
+    embed.add_field(name="Valeur de la position", value=f"${position_value:,.2f}", inline=True)
+    
+    if rr_info:
+        embed.add_field(name="Take Profit", value=f"${take_profit:,.4f}", inline=False)
+        embed.description = rr_info
+    
+    embed.set_footer(text="💡 Position calculée pour le spot trading")
+    
+    await ctx.respond(embed=embed)
 
-# ==========================================
-# CALCULATEUR 2 : RATIO RISQUE/RENDEMENT (conservé pour usage rapide)
-# ==========================================
-
-@bot.slash_command(
-    name="rr",
-    description="Calcule rapidement le ratio risque/rendement (Risk/Reward)"
-)
-async def risk_reward(
+@bot.slash_command(name="leverage", description="Calculer une position avec effet de levier")
+async def leverage(
     ctx,
-    entry: discord.Option(float, "Prix d'entrée", required=True),
-    stop_loss: discord.Option(float, "Prix du stop loss", required=True),
-    target: discord.Option(float, "Prix cible (take profit)", required=True)
+    capital: float = discord.Option(float, description="Capital à risquer ($)"),
+    entry: float = discord.Option(float, description="Prix d'entrée"),
+    stop_loss: float = discord.Option(float, description="Prix du stop loss"),
+    leverage: int = discord.Option(int, description="Effet de levier (ex: 10 pour 10x)")
 ):
-    # ⚡ AJOUT : Différer la réponse
     await ctx.defer()
     
-    try:
-        # Validation
-        if entry <= 0 or stop_loss <= 0 or target <= 0:
-            await ctx.followup.send("❌ Tous les prix doivent être positifs !", ephemeral=True)
-            return
-        
-        # Calculs
-        risk = abs(entry - stop_loss)
-        reward = abs(target - entry)
-        
-        if risk == 0:
-            await ctx.followup.send("❌ Le stop loss ne peut pas être égal au prix d'entrée !", ephemeral=True)
-            return
-        
-        rr_ratio = reward / risk
-        
-        # Déterminer le type de trade
-        is_long = stop_loss < entry < target
-        is_short = stop_loss > entry > target
-        
-        if not (is_long or is_short):
-            await ctx.followup.send("❌ Configuration invalide ! Vérifiez l'ordre des prix.\n💡 Long: SL < Entry < Target\n💡 Short: SL > Entry > Target", ephemeral=True)
-            return
-        
-        position_type = "LONG 📈" if is_long else "SHORT 📉"
-        
-        # Couleur selon le ratio
-        if rr_ratio >= 3:
-            color = discord.Color.green()
-            verdict = "✅ Excellent ratio !"
-        elif rr_ratio >= 2:
-            color = discord.Color.blue()
-            verdict = "👍 Bon ratio"
-        elif rr_ratio >= 1:
-            color = discord.Color.gold()
-            verdict = "⚠️ Ratio acceptable"
-        else:
-            color = discord.Color.red()
-            verdict = "❌ Ratio défavorable"
-        
-        # Créer l'embed
-        embed = discord.Embed(
-            title="⚖️ Ratio Risque/Rendement",
-            description=f"**Type : {position_type}**",
-            color=color
-        )
-        
-        embed.add_field(
-            name="📍 Prix",
-            value=f"```\nEntrée     : ${entry:,.2f}\nStop Loss  : ${stop_loss:,.2f}\nCible      : ${target:,.2f}```",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📊 Analyse",
-            value=f"```\nRisque      : ${risk:,.2f}\nGain espéré : ${reward:,.2f}```",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🎯 Ratio R/R",
-            value=f"```\n{rr_ratio:.2f} : 1\n\n{verdict}```",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="💡 Signification",
-            value=f"Pour chaque $1 risqué, vous pouvez gagner ${rr_ratio:.2f}",
-            inline=False
-        )
-        
-        embed.set_footer(text="💡 Utilisez /position ou /leverage avec target pour un calcul complet")
-        
-        await ctx.followup.send(embed=embed)
-        
-    except Exception as e:
-        await ctx.followup.send(f"❌ Erreur lors du calcul : {str(e)}", ephemeral=True)
+    if capital <= 0 or entry <= 0 or stop_loss <= 0 or leverage <= 0:
+        await ctx.respond("❌ Toutes les valeurs doivent être positives!")
+        return
+    
+    if leverage > 125:
+        await ctx.respond("⚠️ Attention: Levier très élevé (max généralement 125x)")
+    
+    is_long = entry > stop_loss
+    
+    # Calcul du risque
+    risk_per_unit = abs(entry - stop_loss)
+    risk_percent = (risk_per_unit / entry) * 100
+    
+    # Avec levier
+    effective_capital = capital * leverage
+    quantity = effective_capital / entry
+    
+    # Marge requise (sans levier ce serait la valeur totale)
+    margin_required = effective_capital / leverage
+    
+    # Perte maximale = capital risqué
+    max_loss = capital
+    
+    embed = discord.Embed(
+        title="⚡ Calcul de Position avec Levier",
+        color=discord.Color.gold()
+    )
+    
+    embed.add_field(name="Type", value=f"{'🟢 LONG' if is_long else '🔴 SHORT'}", inline=False)
+    embed.add_field(name="Capital risqué", value=f"${capital:,.2f}", inline=True)
+    embed.add_field(name="Levier", value=f"{leverage}x", inline=True)
+    embed.add_field(name="Marge requise", value=f"${margin_required:,.2f}", inline=True)
+    embed.add_field(name="Prix d'entrée", value=f"${entry:,.4f}", inline=True)
+    embed.add_field(name="Stop Loss", value=f"${stop_loss:,.4f}", inline=True)
+    embed.add_field(name="Risque", value=f"{risk_percent:.2f}%", inline=True)
+    embed.add_field(name="Quantité", value=f"{quantity:,.4f}", inline=True)
+    embed.add_field(name="Valeur de position", value=f"${effective_capital:,.2f}", inline=True)
+    embed.add_field(name="Perte maximale", value=f"${max_loss:,.2f}", inline=True)
+    
+    embed.set_footer(text="⚠️ Le levier amplifie les gains ET les pertes!")
+    
+    await ctx.respond(embed=embed)
 
-# ==========================================
-# CALCULATEUR 3 : DOLLAR COST AVERAGING (DCA)
-# ==========================================
+@bot.slash_command(name="rr", description="Calculer rapidement le ratio risque/rendement")
+async def rr(
+    ctx,
+    entry: float = discord.Option(float, description="Prix d'entrée"),
+    stop_loss: float = discord.Option(float, description="Prix du stop loss"),
+    take_profit: float = discord.Option(float, description="Prix du take profit")
+):
+    await ctx.defer()
+    
+    if entry <= 0 or stop_loss <= 0 or take_profit <= 0:
+        await ctx.respond("❌ Toutes les valeurs doivent être positives!")
+        return
+    
+    is_long = entry > stop_loss
+    
+    risk = abs(entry - stop_loss)
+    reward = abs(take_profit - entry)
+    
+    if risk == 0:
+        await ctx.respond("❌ Le risque ne peut pas être nul!")
+        return
+    
+    rr_ratio = reward / risk
+    risk_percent = (risk / entry) * 100
+    reward_percent = (reward / entry) * 100
+    
+    # Déterminer la couleur selon le R/R
+    if rr_ratio >= 3:
+        color = discord.Color.green()
+        quality = "🟢 Excellent"
+    elif rr_ratio >= 2:
+        color = discord.Color.blue()
+        quality = "🔵 Bon"
+    elif rr_ratio >= 1:
+        color = discord.Color.orange()
+        quality = "🟠 Acceptable"
+    else:
+        color = discord.Color.red()
+        quality = "🔴 Mauvais"
+    
+    embed = discord.Embed(
+        title="📊 Ratio Risque/Rendement",
+        color=color
+    )
+    
+    embed.add_field(name="Type", value=f"{'🟢 LONG' if is_long else '🔴 SHORT'}", inline=False)
+    embed.add_field(name="Entry", value=f"${entry:,.4f}", inline=True)
+    embed.add_field(name="Stop Loss", value=f"${stop_loss:,.4f}", inline=True)
+    embed.add_field(name="Take Profit", value=f"${take_profit:,.4f}", inline=True)
+    embed.add_field(name="Risque", value=f"${risk:,.4f} ({risk_percent:.2f}%)", inline=True)
+    embed.add_field(name="Rendement", value=f"${reward:,.4f} ({reward_percent:.2f}%)", inline=True)
+    embed.add_field(name="Ratio R/R", value=f"**1:{rr_ratio:.2f}**", inline=True)
+    embed.add_field(name="Qualité", value=quality, inline=False)
+    
+    await ctx.respond(embed=embed)
 
-@bot.slash_command(
-    name="dca",
-    description="Calcule le prix moyen d'achat après plusieurs entrées"
-)
+@bot.slash_command(name="dca", description="Calculer le prix moyen d'achat (DCA)")
 async def dca(
     ctx,
-    positions: discord.Option(str, "Format: prix1,quantité1 prix2,quantité2 (ex: 50,100 45,200 48,150)", required=True)
+    entries: str = discord.Option(str, description="Format: prix1:quantité1,prix2:quantité2 (ex: 100:1,90:1.5)")
 ):
-    # ⚡ AJOUT : Différer la réponse
     await ctx.defer()
     
     try:
-        # Parser les positions
-        entries = []
-        for entry_str in positions.split():
-            try:
-                price_str, qty_str = entry_str.split(',')
-                price = float(price_str)
-                qty = float(qty_str)
-                if price <= 0 or qty <= 0:
-                    await ctx.followup.send("❌ Les prix et quantités doivent être positifs !", ephemeral=True)
-                    return
-                entries.append((price, qty))
-            except ValueError:
-                await ctx.followup.send(f"❌ Format invalide ! Utilisez : `prix,quantité prix,quantité`\nExemple : `50,100 45,200 48,150`", ephemeral=True)
+        # Parser les entrées
+        positions = []
+        total_quantity = 0
+        total_cost = 0
+        
+        for entry in entries.split(','):
+            price, quantity = entry.split(':')
+            price = float(price.strip())
+            quantity = float(quantity.strip())
+            
+            if price <= 0 or quantity <= 0:
+                await ctx.respond("❌ Les prix et quantités doivent être positifs!")
                 return
+            
+            cost = price * quantity
+            positions.append({
+                'price': price,
+                'quantity': quantity,
+                'cost': cost
+            })
+            
+            total_quantity += quantity
+            total_cost += cost
         
-        if len(entries) == 0:
-            await ctx.followup.send("❌ Aucune position valide trouvée !", ephemeral=True)
-            return
-        
-        # Calculs
-        total_cost = sum(price * qty for price, qty in entries)
-        total_quantity = sum(qty for _, qty in entries)
+        # Calculer le prix moyen
         average_price = total_cost / total_quantity
-        
-        # Prix min et max
-        prices = [price for price, _ in entries]
-        min_price = min(prices)
-        max_price = max(prices)
         
         # Créer l'embed
         embed = discord.Embed(
-            title="📊 Dollar Cost Averaging (DCA)",
-            description=f"Analyse de vos {len(entries)} entrées",
+            title="💰 Dollar Cost Averaging (DCA)",
             color=discord.Color.blue()
         )
         
-        # Détail des entrées
-        entries_detail = ""
-        for i, (price, qty) in enumerate(entries, 1):
-            cost = price * qty
-            entries_detail += f"Entrée {i}: {qty:,.2f} × ${price:,.2f} = ${cost:,.2f}\n"
+        # Ajouter chaque position
+        for i, pos in enumerate(positions, 1):
+            embed.add_field(
+                name=f"Position {i}",
+                value=f"Prix: ${pos['price']:,.4f}\nQté: {pos['quantity']:,.4f}\nCoût: ${pos['cost']:,.2f}",
+                inline=True
+            )
         
-        embed.add_field(
-            name="📍 Détail des Entrées",
-            value=f"```\n{entries_detail}```",
-            inline=False
-        )
+        embed.add_field(name="\u200b", value="\u200b", inline=False)
+        embed.add_field(name="Quantité totale", value=f"{total_quantity:,.4f}", inline=True)
+        embed.add_field(name="Coût total", value=f"${total_cost:,.2f}", inline=True)
+        embed.add_field(name="**Prix moyen**", value=f"**${average_price:,.4f}**", inline=True)
         
-        embed.add_field(
-            name="🎯 Résultat",
-            value=f"```\n💰 Prix moyen      : ${average_price:.4f}\n📦 Quantité totale : {total_quantity:,.2f}\n💵 Investissement  : ${total_cost:,.2f}```",
-            inline=False
-        )
+        await ctx.respond(embed=embed)
         
-        embed.add_field(
-            name="📈 Statistiques",
-            value=f"```\nPrix le plus bas  : ${min_price:,.2f}\nPrix le plus haut : ${max_price:,.2f}\nÉcart            : ${max_price - min_price:,.2f}```",
-            inline=False
-        )
-        
-        embed.set_footer(text="💡 Le DCA permet de lisser le prix  prix d'achat dans le temps")
-        
-        await ctx.followup.send(embed=embed)
-        
+    except ValueError:
+        await ctx.respond("❌ Format invalide! Utilisez: `prix1:quantité1,prix2:quantité2`\nExemple: `/dca 100:1,90:1.5,85:2`")
     except Exception as e:
-        await ctx.followup.send(f"❌ Erreur lors du calcul : {str(e)}", ephemeral=True)
+        await ctx.respond(f"❌ Erreur: {str(e)}")
 
+# ============================================================================
+# NOUVELLES COMMANDES - ANALYSE DE MOYENNES MOBILES
+# ============================================================================
 
-# ==========================================
-# CALCULATEUR 4 : POSITION AVEC LEVIER (avec RR intégré)
-# ==========================================
-
-@bot.slash_command(
-    name="leverage",
-    description="Calcule une position avec effet de levier (+ ratio R/R si target fournie)"
-)
-async def leverage(
+@bot.slash_command(name="ma_check", description="Vérifier l'état des moyennes mobiles (BTC ou ETH)")
+async def ma_check(
     ctx,
-    capital: discord.Option(float, "Capital total disponible", required=True),
-    leverage_amount: discord.Option(
-        int, 
-        "Effet de levier (ex: 10 pour 10x)", 
-        required=True,
-        choices=[1, 2, 5, 10, 20, 50, 100, 125]
-    ),
-    risk_percent: discord.Option(float, "Pourcentage de risque par trade (ex: 2 pour 2%)", required=True),
-    entry: discord.Option(float, "Prix d'entrée prévu", required=True),
-    stop_loss: discord.Option(float, "Prix du stop loss", required=True),
-    target: discord.Option(float, "Prix cible (take profit) - OPTIONNEL pour calcul R/R", required=False, default=None)
+    crypto: str = discord.Option(
+        str,
+        description="Crypto à analyser",
+        choices=["BTC", "ETH"]
+    )
 ):
-    # ⚡ AJOUT : Différer la réponse
     await ctx.defer()
     
+    # Convertir en symbole Binance
+    symbol = format_symbol(crypto)
+    
+    if not symbol:
+        await ctx.respond("❌ Crypto non supportée! Utilisez BTC ou ETH.")
+        return
+    
     try:
-        # Validation des inputs
-        if capital <= 0:
-            await ctx.followup.send("❌ Le capital doit être positif !", ephemeral=True)
-            return
-        if risk_percent <= 0 or risk_percent > 100:
-            await ctx.followup.send("❌ Le pourcentage de risque doit être entre 0 et 100 !", ephemeral=True)
-            return
-        if entry <= 0 or stop_loss <= 0:
-            await ctx.followup.send("❌ Les prix doivent être positifs !", ephemeral=True)
-            return
-        if leverage_amount < 1:
-            await ctx.followup.send("❌ Le levier doit être au minimum 1x !", ephemeral=True)
+        # Analyser le symbole
+        analysis = analyzer.analyze_symbol(symbol)
+        
+        if analysis['status'] != 'success':
+            await ctx.respond(f"❌ Erreur: {analysis.get('message', 'Erreur inconnue')}")
             return
         
-        # Déterminer le type de position
-        is_long = stop_loss < entry
-        position_type = "LONG 📈" if is_long else "SHORT 📉"
-        color = discord.Color.green() if is_long else discord.Color.red()
-        
-        # === CALCULS AVEC LEVIER ===
-        
-        # Montant risqué (en $)
-        risk_amount = capital * (risk_percent / 100)
-        
-        # Distance du stop loss (en %)
-        stop_distance_percent = abs(entry - stop_loss) / entry * 100
-        
-        # Taille de position en $ (exposition totale)
-        position_value = risk_amount / (stop_distance_percent / 100)
-        
-        # Marge réellement utilisée (avec levier)
-        margin_required = position_value / leverage_amount
-        
-        # Quantité d'unités
-        position_size = position_value / entry
-        
-        # Prix de liquidation approximatif
-        if is_long:
-            liquidation_price = entry - (margin_required / position_size)
+        # Déterminer la couleur selon l'alignement
+        if analysis['aligned_bullish']:
+            color = discord.Color.green()
+            status_emoji = "🟢"
+            status_text = "ALIGNEMENT HAUSSIER"
+        elif analysis['aligned_bearish']:
+            color = discord.Color.red()
+            status_emoji = "🔴"
+            status_text = "ALIGNEMENT BAISSIER"
         else:
-            liquidation_price = entry + (margin_required / position_size)
+            color = discord.Color.orange()
+            status_emoji = "🟠"
+            status_text = "PAS D'ALIGNEMENT"
         
-        # Distance jusqu'à liquidation (en %)
-        liquidation_distance_percent = abs(liquidation_price - entry) / entry * 100
-        
-        # Vérifier si le stop loss est avant ou après la liquidation
-        if is_long and stop_loss < liquidation_price:
-            warning = "⚠️ ATTENTION : Votre stop loss est en dessous du prix de liquidation !"
-        elif not is_long and stop_loss > liquidation_price:
-            warning = "⚠️ ATTENTION : Votre stop loss est au-dessus du prix de liquidation !"
-        else:
-            warning = "✅ Stop loss correctement placé (avant liquidation)"
-        
-        # Vérifier si on a assez de capital
-        if margin_required > capital:
-            await ctx.followup.send(
-                f"❌ **Capital insuffisant !**\n\n"
-                f"Marge requise : ${margin_required:,.2f}\n"
-                f"Capital disponible : ${capital:,.2f}\n\n"
-                f"💡 Réduisez le levier ou augmentez votre capital.",
-                ephemeral=True
-            )
-            return
-        
-        # Pourcentage du capital utilisé
-        capital_used_percent = (margin_required / capital) * 100
-        
-        # === CALCUL DU RATIO R/R SI TARGET FOURNIE ===
-        rr_ratio = None
-        reward_amount = None
-        target_pnl_dollar = None
-        target_pnl_percent = None
-        rr_verdict = None
-        
-        if target is not None:
-            if target <= 0:
-                await ctx.followup.send("❌ Le prix cible doit être positif !", ephemeral=True)
-                return
-            
-            # Vérifier la cohérence de la target
-            target_valid = (is_long and target > entry) or (not is_long and target < entry)
-            
-            if not target_valid:
-                await ctx.followup.send(
-                    "❌ Configuration invalide !\n"
-                    f"💡 Pour un {'LONG' if is_long else 'SHORT'}, "
-                    f"la target doit être {'au-dessus' if is_long else 'en-dessous'} de l'entrée.",
-                    ephemeral=True
-                )
-                return
-            
-            # Calcul du R/R
-            risk_per_unit = abs(entry - stop_loss)
-            reward_per_unit = abs(target - entry)
-            rr_ratio = reward_per_unit / risk_per_unit
-            
-            # P&L à la target
-            if is_long:
-                target_pnl_dollar = (target - entry) * position_size
-            else:
-                target_pnl_dollar = (entry - target) * position_size
-            
-            target_pnl_percent = (target_pnl_dollar / margin_required) * 100
-            reward_amount = target_pnl_dollar
-            
-            # Verdict selon le ratio
-            if rr_ratio >= 3:
-                rr_verdict = "✅ Excellent ratio !"
-            elif rr_ratio >= 2:
-                rr_verdict = "👍 Bon ratio"
-                color = discord.Color.blue()
-            elif rr_ratio >= 1:
-                rr_verdict = "⚠️ Ratio acceptable"
-                color = discord.Color.gold()
-            else:
-                rr_verdict = "❌ Ratio défavorable"
-                color = discord.Color.red()
-        
-        # === CRÉATION DE L'EMBED ===
-        
-        title = "⚡ Calculateur de Position avec Levier" + (" + Ratio R/R" if target else "")
+        # Créer l'embed
         embed = discord.Embed(
-            title=title,
-            description=f"**Type : {position_type} | Levier : {leverage_amount}x**",
+            title=f"📊 Analyse Moyennes Mobiles - {crypto}",
+            description=f"**{status_emoji} {status_text}**",
             color=color
         )
         
+        # Prix actuel
+        current_price = analysis['current_price']
         embed.add_field(
-            name="💰 Capital & Risque",
-            value=f"```\nCapital total      : ${capital:,.2f}\nRisque accepté     : {risk_percent}%\nMontant à risquer  : ${risk_amount:,.2f}```",
+            name="💰 Prix Actuel",
+            value=f"${current_price:,.2f}",
             inline=False
         )
         
-        embed.add_field(
-            name="📊 Position",
-            value=f"```\nExposition totale  : ${position_value:,.2f}\nMarge utilisée     : ${margin_required:,.2f} ({capital_used_percent:.1f}% du capital)\nQuantité          : {position_size:,.4f} unités```",
-            inline=False
-        )
-        
-        # Prix avec ou sans target
-        if target:
-            embed.add_field(
-                name="📍 Prix",
-                value=f"```\nEntrée            : ${entry:,.2f}\nStop Loss         : ${stop_loss:,.2f}\nTarget            : ${target:,.2f}\nDistance SL       : {stop_distance_percent:.2f}%```",
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="📍 Prix",
-                value=f"```\nEntrée            : ${entry:,.2f}\nStop Loss         : ${stop_loss:,.2f}\nDistance SL       : {stop_distance_percent:.2f}%```",
-                inline=False
-            )
-        
-        embed.add_field(
-            name="🔥 Liquidation",
-            value=f"```\nPrix liquidation  : ${liquidation_price:,.2f}\nDistance liquidation: {liquidation_distance_percent:.2f}%\n\n{warning}```",
-            inline=False
-        )
-        
-        # Afficher le R/R si calculé
-        if rr_ratio is not None:
-            embed.add_field(
-                name="⚖️ Ratio Risque/Rendement",
-                value=f"```\n🎯 Ratio R/R       : {rr_ratio:.2f}:1\n💰 Gain à la target: ${reward_amount:,.2f}\n📊 ROI sur marge   : +{target_pnl_percent:.1f}%\n\n{rr_verdict}```",
-                inline=False
-            )
-        
-        # Calcul du P&L potentiel à différents niveaux
-        pnl_scenarios = []
-        for percent in [10, 5, -5, -10]:
-            if is_long:
-                scenario_price = entry * (1 + percent/100)
+        # Moyennes mobiles
+        ma_values = analysis['ma_values']
+        ma_text = ""
+        for period in [112, 336, 375, 448, 750]:
+            ma_value = ma_values.get(period, 0)
+            # Indiquer si le prix est au-dessus ou en-dessous
+            if current_price > ma_value:
+                indicator = "↑"
             else:
-                scenario_price = entry * (1 - percent/100)
-            
-            pnl_dollar = (scenario_price - entry) * position_size if is_long else (entry - scenario_price) * position_size
-            pnl_percent = (pnl_dollar / margin_required) * 100
-            
-            sign = "+" if pnl_dollar >= 0 else ""
-            pnl_scenarios.append(f"{sign}{percent}%: {sign}${pnl_dollar:,.2f} ({sign}{pnl_percent:.1f}%)")
+                indicator = "↓"
+            ma_text += f"MA{period}: ${ma_value:,.2f} {indicator}\n"
         
         embed.add_field(
-            name="📈 Scénarios P&L (sur la marge)",
-            value=f"```\n" + "\n".join(pnl_scenarios) + "```",
+            name="📈 Moyennes Mobiles",
+            value=ma_text,
+            inline=True
+        )
+        
+        # Compression
+        compression = analysis['compression_pct']
+        is_compressed = analysis['is_compressed']
+        
+        if is_compressed:
+            compression_status = "🔥 COMPRESSION DÉTECTÉE!"
+            compression_color = "```diff\n+ ALERTE COMPRESSION\n```"
+        else:
+            compression_status = "Normale"
+            compression_color = f"```\n{compression:.2f}%\n```"
+        
+        embed.add_field(
+            name="📊 Compression",
+            value=f"{compression_status}\n{compression_color}",
+            inline=True
+        )
+        
+        # Position du prix
+        if analysis['price_above_all_ma']:
+            price_position = "🟢 Au-dessus de toutes les MA"
+        elif analysis['price_below_all_ma']:
+            price_position = "🔴 En-dessous de toutes les MA"
+        else:
+            price_position = "🟠 Entre les MA"
+        
+        embed.add_field(
+            name="📍 Position du Prix",
+            value=price_position,
             inline=False
         )
         
-        # Avertissements
-        warnings = []
-        if leverage_amount >= 50:
-            warnings.append("⚠️ Levier très élevé (≥50x) : risque de liquidation important")
-        if capital_used_percent > 80:
-            warnings.append("⚠️ Vous utilisez >80% de votre capital en marge")
-        if liquidation_distance_percent < 5:
-            warnings.append("⚠️ Prix de liquidation très proche (< 5%)")
-        if rr_ratio is not None and rr_ratio < 2:
-            warnings.append("⚠️ Ratio R/R < 2:1 : risque/rendement peu favorable")
+        # Ordre actuel des MA
+        current_order = analysis['current_order']
+        order_text = " > ".join([f"MA{p}" for p in current_order])
+        embed.add_field(
+            name="🔄 Ordre actuel (par valeur)",
+            value=f"`{order_text}`",
+            inline=False
+        )
         
-        if warnings:
+        # Distances entre MA
+        distances = analysis.get('ma_distances', {})
+        if distances:
+            dist_text = ""
+            for pair, dist in distances.items():
+                dist_text += f"{pair}: {dist:.2f}%\n"
             embed.add_field(
-                name="⚠️ Avertissements",
-                value="\n".join(warnings),
+                name="📏 Distances entre MA",
+                value=dist_text,
                 inline=False
             )
         
-        footer_text = f"💡 Avec {leverage_amount}x de levier, les gains ET les pertes sont multipliés"
-        if not target:
-            footer_text += " | Ajoutez target:XX pour calculer le ratio R/R"
-        embed.set_footer(text=footer_text)
+        # Footer avec info
+        embed.set_footer(
+            text=f"Données: {analysis['data_points']} jours | Dernière mise à jour: {analysis['timestamp'].strftime('%Y-%m-%d %H:%M')}"
+        )
         
-        await ctx.followup.send(embed=embed)
+        await ctx.respond(embed=embed)
         
     except Exception as e:
-        await ctx.followup.send(f"❌ Erreur lors du calcul : {str(e)}", ephemeral=True)
+        await ctx.respond(f"❌ Erreur lors de l'analyse: {str(e)}")
 
-
-# ==========================================
-# COMMANDE D'AIDE
-# ==========================================
-@bot.slash_command(
-    name="help",
-    description="Affiche la liste des commandes disponibles"
-)
-async def help_command(ctx):
-    # ⚡ AJOUT : Différer la réponse
+@bot.slash_command(name="ma_compare", description="Comparer BTC et ETH")
+async def ma_compare(ctx):
     await ctx.defer()
     
+    try:
+        # Analyser BTC et ETH
+        btc_analysis = analyzer.analyze_symbol('BTCUSDT')
+        eth_analysis = analyzer.analyze_symbol('ETHUSDT')
+        
+        if btc_analysis['status'] != 'success' or eth_analysis['status'] != 'success':
+            await ctx.respond("❌ Erreur lors de l'analyse")
+            return
+        
+        embed = discord.Embed(
+            title="📊 Comparaison BTC vs ETH",
+            color=discord.Color.blue()
+        )
+        
+        # BTC
+        btc_status = "🟢 Haussier" if btc_analysis['aligned_bullish'] else "🔴 Baissier" if btc_analysis['aligned_bearish'] else "🟠 Neutre"
+        btc_compression = "🔥 OUI" if btc_analysis['is_compressed'] else "Non"
+        
+        embed.add_field(
+            name="₿ BITCOIN",
+            value=f"Prix: ${btc_analysis['current_price']:,.2f}\n"
+                  f"Alignement: {btc_status}\n"
+                  f"Compression: {btc_compression}\n"
+                  f"Écart MA: {btc_analysis['compression_pct']:.2f}%",
+            inline=True
+        )
+        
+        # ETH
+        eth_status = "🟢 Haussier" if eth_analysis['aligned_bullish'] else "🔴 Baissier" if eth_analysis['aligned_bearish'] else "🟠 Neutre"
+        eth_compression = "🔥 OUI" if eth_analysis['is_compressed'] else "Non"
+        
+        embed.add_field(
+            name="⟠ ETHEREUM",
+            value=f"Prix: ${eth_analysis['current_price']:,.2f}\n"
+                  f"Alignement: {eth_status}\n"
+                  f"Compression: {eth_compression}\n"
+                  f"Écart MA: {eth_analysis['compression_pct']:.2f}%",
+            inline=True
+        )
+        
+        # Résumé
+        both_bullish = btc_analysis['aligned_bullish'] and eth_analysis['aligned_bullish']
+        both_bearish = btc_analysis['aligned_bearish'] and eth_analysis['aligned_bearish']
+        both_compressed = btc_analysis['is_compressed'] and eth_analysis['is_compressed']
+        
+        summary = ""
+        if both_bullish:
+            summary = "🟢 Les deux sont alignés HAUSSIER!"
+        elif both_bearish:
+            summary = "🔴 Les deux sont alignés BAISSIER!"
+        else:
+            summary = "🟠 Alignements divergents"
+        
+        if both_compressed:
+            summary += "\n🔥 COMPRESSION DÉTECTÉE SUR LES DEUX!"
+        
+        embed.add_field(
+            name="📋 Résumé",
+            value=summary,
+            inline=False
+        )
+        
+        embed.set_footer(text="💡 Utilisez /ma_check pour plus de détails")
+        
+        await ctx.respond(embed=embed)
+        
+    except Exception as e:
+        await ctx.respond(f"❌ Erreur: {str(e)}")
+
+@bot.slash_command(name="help", description="Afficher toutes les commandes disponibles")
+async def help_command(ctx):
     embed = discord.Embed(
-        title="📚 Guide des Commandes - Trading Calculator Bot",
-        description="Voici toutes les commandes disponibles pour vous aider dans vos calculs de trading",
+        title="📚 Guide des Commandes - Trading Helper Bot",
+        description="Bot d'aide au trading avec calculs de position et analyse technique",
         color=discord.Color.blue()
     )
     
+    # Calculs de position
     embed.add_field(
-        name="💰 /position",
-        value="```Calcule la taille optimale de position (SPOT)\n+ Ratio R/R automatique si target fournie\n\nParamètres:\n- capital: Votre capital total\n- risk_percent: % de risque (ex: 2)\n- entry: Prix d'entrée\n- stop_loss: Prix du stop loss\n- target: [OPTIONNEL] Prix cible```",
+        name="💼 Calculs de Position",
+        value=(
+            "`/position` - Calculer une position spot\n"
+            "`/leverage` - Calculer avec effet de levier\n"
+            "`/rr` - Ratio risque/rendement\n"
+            "`/dca` - Prix moyen d'achat"
+        ),
+        inline=False
+    )
+    
+    # Analyse technique
+    embed.add_field(
+        name="📊 Analyse Technique",
+        value=(
+            "`/ma_check <BTC|ETH>` - Analyser les moyennes mobiles\n"
+            "`/ma_compare` - Comparer BTC et ETH\n"
+            "```Moyennes: MA112, MA336, MA375, MA448, MA750```"
+        ),
         inline=False
     )
     
     embed.add_field(
-        name="⚡ /leverage",
-        value="```Calcule une position avec LEVIER (Futures/Margin)\n+ Ratio R/R automatique si target fournie\n\nParamètres:\n- capital: Votre capital\n- leverage: Levier (10x, 20x, 50x, 100x)\n- risk_percent: % de risque\n- entry: Prix d'entrée\n- stop_loss: Stop loss\n- target: [OPTIONNEL] Prix cible\n\nAffiche: Marge, liquidation, P&L, R/R```",
+        name="🎯 Détection Automatique",
+        value=(
+            "✅ Alignement haussier/baissier\n"
+            "✅ Compression des moyennes (<5%)\n"
+            "✅ Position du prix vs MA"
+        ),
         inline=False
     )
     
-    embed.add_field(
-        name="⚖️ /rr",
-        value="```Calcule RAPIDEMENT le ratio risque/rendement\n\nParamètres:\n- entry: Prix d'entrée\n- stop_loss: Prix du stop loss\n- target: Prix cible\n\n💡 Pratique pour un calcul R/R isolé```",
-        inline=False
-    )
+    embed.set_footer(text="💡 Toutes les données proviennent de Binance")
     
-    embed.add_field(
-        name="📊 /dca",
-        value="```Calcule le prix moyen d'achat (DCA)\n\nFormat: prix1,qty1 prix2,qty2\nExemple: 50,100 45,200 48,150```",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="💡 Conseils",
-        value="• **SPOT**: Utilisez /position (pas de liquidation)\n• **FUTURES**: Utilisez /leverage (attention liquidation !)\n• Visez un ratio R/R ≥ 2:1\n• Levier élevé = risque élevé\n• **NOUVEAU**: Ajoutez votre target pour calculer automatiquement le R/R !",
-        inline=False
-    )
-    
-    embed.set_footer(text="Bot créé pour faciliter vos calculs de trading | Utilisez avec prudence")
-    
-    await ctx.followup.send(embed=embed)
+    await ctx.respond(embed=embed)
 
-
-
-# ==========================================
-# LANCER LE BOT
-# ==========================================
-
+# Lancer le bot
 if __name__ == "__main__":
-    token = os.getenv('DISCORD_TOKEN')
-    if not token:
-        print("❌ ERREUR: Token Discord non trouvé dans .env")
-        print("💡 Créez un fichier .env avec: DISCORD_TOKEN=votre_token")
+    TOKEN = os.getenv('DISCORD_TOKEN')
+    if not TOKEN:
+        print("❌ DISCORD_TOKEN non trouvé dans .env")
     else:
-        print("🚀 Démarrage du bot...")
-        bot.run(token)
+        bot.run(TOKEN)
