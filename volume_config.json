@@ -1,0 +1,29 @@
+{
+  "check_interval_minutes": 15,
+  "webhook_url": "https://discord.com/api/webhooks/1456784904514699536/8NyWL1s9Hb2l2MEk8-4Dwm2SFHV7YerUiD0yPQXCm8h3M9DrttA62LSeHkYs-8KBYXAM",
+  "cooldown_minutes": 30,
+  "thresholds": {
+    "moderate": 150,
+    "high": 200,
+    "critical": 300
+  },
+  "reference_periods": {
+    "short": 24,
+    "long": 168
+  },
+  "assets": {
+    "crypto": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "stocks": [
+      "AAPL",
+      "AMZN",
+      "GOOGL",
+      "META",
+      "MSFT",
+      "NVDA",
+      "TSLA"
+    ]
+  }
+}
