@@ -1,6 +1,6 @@
 {
   "check_interval_minutes": 60,
-  "webhook_url": "https://discord.com/api/webhooks/1456784904514699536/8NyWL1s9Hb2l2MEk8-4Dwm2SFHV7YerUiD0yPQXCm8h3M9DrttA62LSeHkYs-8KBYXAM",
+  "webhook_url": "https://discord.com/api/webhooks/1457147566692237405/6TadQbhC9E6nzMIMhhtSo8Rg-HokAhgsz8IZejAwWEdjjKaE7_vfOSMI4k9OZfmCjxv0",
   "cooldown_hours": 4,
   "compression_threshold": 3.0,
   "assets": {
