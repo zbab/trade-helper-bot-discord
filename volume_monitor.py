@@ -218,7 +218,7 @@ class VolumeMonitor:
         return None
     
     def send_discord_alert(self, data: Dict, alert_level: str):
-        """Envoie une alerte sur Discord via webhook"""
+        """Envoie une alerte sur Discord via webhook - VERSION 1 : CLAIR ET FACTUEL"""
         webhook_url = self.config.get('webhook_url')
         
         if not webhook_url:
@@ -229,7 +229,7 @@ class VolumeMonitor:
             print(f"⏳ Cooldown actif pour {data['symbol']}")
             return
         
-        # Emojis selon le niveau
+        # Configuration par niveau d'alerte
         emoji_map = {
             'moderate': '⚠️',
             'high': '🔥',
@@ -242,84 +242,94 @@ class VolumeMonitor:
             'critical': 0xFF0000   # Rouge
         }
         
+        level_text = {
+            'moderate': 'MODÉRÉ (+150%)',
+            'high': 'ÉLEVÉ (+200%)',
+            'critical': 'CRITIQUE (+300%)'
+        }
+        
         emoji = emoji_map.get(alert_level, '📊')
         color = color_map.get(alert_level, 0x3498db)
+        level_name = level_text.get(alert_level, 'ALERTE')
         
-        # Formater les valeurs
+        # Formater le symbole
         symbol_display = data['symbol'].replace('USDT', '').replace('BUSD', '')
-        volume_formatted = f"{data['current_volume']:,.0f}"
-        price_formatted = f"${data['current_price']:,.2f}"
         
-        # Moyennes mobiles formatées
-        ma_text = (
-            f"MA13: {data['volume_ma13']:,.0f}\n"
-            f"MA25: {data['volume_ma25']:,.0f}\n"
-            f"MA32: {data['volume_ma32']:,.0f}\n"
-            f"MA100: {data['volume_ma100']:,.0f}\n"
-            f"MA200: {data['volume_ma200']:,.0f}\n"
-            f"MA300: {data['volume_ma300']:,.0f}"
-        )
-        
-        # Lien
+        # Lien vers la plateforme
         if data['type'] == 'crypto':
             link = f"https://www.binance.com/en/trade/{data['symbol']}"
         else:
             link = f"https://finance.yahoo.com/quote/{data['symbol']}"
         
-        # Embed Discord
+        # Construire l'embed Discord
         embed = {
-            "title": f"{emoji} ALERTE VOLUME - {symbol_display}",
+            "title": f"{emoji} PIC DE VOLUME - {symbol_display}",
+            "description": f"**Niveau : {level_name}**",
             "color": color,
+            "url": link,
             "fields": [
                 {
-                    "name": "📊 Volume actuel",
-                    "value": volume_formatted,
-                    "inline": True
+                    "name": "━━━━━━━━━━━━━━━━━━━━━━",
+                    "value": "** **",
+                    "inline": False
                 },
                 {
-                    "name": "💰 Prix",
-                    "value": price_formatted,
-                    "inline": True
+                    "name": "📊 SITUATION ACTUELLE",
+                    "value": (
+                        f"**Volume actuel:** {data['current_volume']:,.0f}\n"
+                        f"**Prix actuel:** ${data['current_price']:,.2f}\n"
+                        f"**Heure:** {data['timestamp'].strftime('%H:%M:%S')}"
+                    ),
+                    "inline": False
                 },
                 {
-                    "name": "\u200b",
-                    "value": "\u200b",
-                    "inline": True
+                    "name": "━━━━━━━━━━━━━━━━━━━━━━",
+                    "value": "** **",
+                    "inline": False
                 },
                 {
-                    "name": "📈 vs MA25 (court terme)",
-                    "value": f"**{data['increase_24h']:+.1f}%**",
-                    "inline": True
+                    "name": "📈 COMPARAISON COURT TERME (MA25 - ~1 jour)",
+                    "value": (
+                        f"**Moyenne normale:** {data['avg_volume_24h']:,.0f}\n"
+                        f"**Volume actuel:** {data['current_volume']:,.0f}\n"
+                        f"**Variation:** {data['increase_24h']:+.1f}%"
+                    ),
+                    "inline": False
                 },
                 {
-                    "name": "📉 vs MA300 (long terme)",
-                    "value": f"**{data['increase_7d']:+.1f}%**",
-                    "inline": True
+                    "name": "📉 COMPARAISON LONG TERME (MA300 - ~12 jours)",
+                    "value": (
+                        f"**Moyenne normale:** {data['avg_volume_7d']:,.0f}\n"
+                        f"**Volume actuel:** {data['current_volume']:,.0f}\n"
+                        f"**Variation:** {data['increase_7d']:+.1f}%"
+                    ),
+                    "inline": False
                 },
                 {
-                    "name": "\u200b",
-                    "value": "\u200b",
-                    "inline": True
+                    "name": "━━━━━━━━━━━━━━━━━━━━━━",
+                    "value": "** **",
+                    "inline": False
                 },
                 {
-                    "name": "📊 Moyennes Mobiles Volume",
-                    "value": ma_text,
+                    "name": "📊 DÉTAIL DES MOYENNES MOBILES",
+                    "value": (
+                        f"MA13 (13h):  `{data['volume_ma13']:>12,.0f}`\n"
+                        f"MA25 (1j):   `{data['volume_ma25']:>12,.0f}`\n"
+                        f"MA32 (32h):  `{data['volume_ma32']:>12,.0f}`\n"
+                        f"MA100 (4j):  `{data['volume_ma100']:>12,.0f}`\n"
+                        f"MA200 (8j):  `{data['volume_ma200']:>12,.0f}`\n"
+                        f"MA300 (12j): `{data['volume_ma300']:>12,.0f}`"
+                    ),
                     "inline": False
                 }
             ],
             "footer": {
-                "text": f"Type: {data['type'].upper()} • {data['timestamp'].strftime('%H:%M:%S')}"
+                "text": f"{data['type'].upper()} • Alerte {level_name}"
             },
             "timestamp": data['timestamp'].isoformat()
         }
         
-        # Ajouter lien
-        if link:
-            embed["url"] = link
-        
-        payload = {
-            "embeds": [embed]
-        }
+        payload = {"embeds": [embed]}
         
         try:
             response = requests.post(webhook_url, json=payload)
