@@ -378,8 +378,13 @@ class MAAlertMonitor:
         except Exception as e:
             print(f"❌ Erreur envoi: {e}")
     
-    def check_all_assets(self) -> List[Dict]:
-        """Vérifie tous les actifs"""
+    def check_all_assets(self, silent_mode: bool = False) -> List[Dict]:
+        """
+        Vérifie tous les actifs et envoie des alertes si nécessaire
+        
+        Args:
+            silent_mode: Si True, ne pas envoyer d'alertes (mode warm-up)
+        """
         alerts_sent = []
         
         for timeframe in self.config['timeframes']:
@@ -387,32 +392,37 @@ class MAAlertMonitor:
             for crypto in self.config['assets']['crypto']:
                 data1 = self.get_crypto_ma_data(crypto, timeframe, self.ma_system1)
                 if data1:
-                    alerts = self._check_asset_alerts(data1, self.ma_system1, 'system1')
+                    alerts = self._check_asset_alerts(data1, self.ma_system1, 'system1', silent_mode)
                     alerts_sent.extend(alerts)
                 
                 # Système 2
                 data2 = self.get_crypto_ma_data(crypto, timeframe, self.ma_system2)
                 if data2:
-                    alerts = self._check_asset_alerts(data2, self.ma_system2, 'system2')
+                    alerts = self._check_asset_alerts(data2, self.ma_system2, 'system2', silent_mode)
                     alerts_sent.extend(alerts)
             
             # Stocks - Système 1
             for stock in self.config['assets']['stocks']:
                 data1 = self.get_stock_ma_data(stock, timeframe, self.ma_system1)
                 if data1:
-                    alerts = self._check_asset_alerts(data1, self.ma_system1, 'system1')
+                    alerts = self._check_asset_alerts(data1, self.ma_system1, 'system1', silent_mode)
                     alerts_sent.extend(alerts)
                 
                 # Système 2
                 data2 = self.get_stock_ma_data(stock, timeframe, self.ma_system2)
                 if data2:
-                    alerts = self._check_asset_alerts(data2, self.ma_system2, 'system2')
+                    alerts = self._check_asset_alerts(data2, self.ma_system2, 'system2', silent_mode)
                     alerts_sent.extend(alerts)
         
         return alerts_sent
-    
-    def _check_asset_alerts(self, data: Dict, ma_system: List[int], system_name: str) -> List[Dict]:
-        """Vérifie les alertes pour un actif"""
+
+    def _check_asset_alerts(self, data: Dict, ma_system: List[int], system_name: str, silent_mode: bool = False) -> List[Dict]:
+        """
+        Vérifie les alertes pour un actif
+        
+        Args:
+            silent_mode: Si True, marquer les alertes SANS les envoyer
+        """
         alerts = []
         
         # 1. Croisements
@@ -427,10 +437,11 @@ class MAAlertMonitor:
                     alert_key = f"{data['symbol']}_{data['timeframe']}_{system_name}_{ma_fast}_{ma_slow}_{cross_type}"
                     
                     if self._can_send_alert(alert_key):
-                        self.send_discord_alert(cross_type, data, {
-                            'ma_fast': ma_fast,
-                            'ma_slow': ma_slow
-                        })
+                        if not silent_mode:
+                            self.send_discord_alert(cross_type, data, {
+                                'ma_fast': ma_fast,
+                                'ma_slow': ma_slow
+                            })
                         self._mark_alert_sent(alert_key)
                         alerts.append({
                             'symbol': data['symbol'],
@@ -446,7 +457,8 @@ class MAAlertMonitor:
                 alert_key = f"{data['symbol']}_{data['timeframe']}_{system_name}_{alignment}"
                 
                 if self._can_send_alert(alert_key):
-                    self.send_discord_alert(alignment, data, {})
+                    if not silent_mode:
+                        self.send_discord_alert(alignment, data, {})
                     self._mark_alert_sent(alert_key)
                     alerts.append({
                         'symbol': data['symbol'],
@@ -462,9 +474,10 @@ class MAAlertMonitor:
                 alert_key = f"{data['symbol']}_{data['timeframe']}_{system_name}_compression"
                 
                 if self._can_send_alert(alert_key):
-                    self.send_discord_alert('compression', data, {
-                        'compression': compression
-                    })
+                    if not silent_mode:
+                        self.send_discord_alert('compression', data, {
+                            'compression': compression
+                        })
                     self._mark_alert_sent(alert_key)
                     alerts.append({
                         'symbol': data['symbol'],
