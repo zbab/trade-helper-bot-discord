@@ -78,26 +78,30 @@ class VolumeMonitor:
     def get_crypto_volume_data(self, symbol: str) -> Optional[Dict]:
         """Récupère les données de volume crypto (Binance)"""
         try:
-            # Volume actuel (ticker 24h)
-            ticker_24h = self.binance_client.get_ticker(symbol=symbol)
-            current_volume = float(ticker_24h['volume'])
-            current_price = float(ticker_24h['lastPrice'])
+            # Récupérer suffisamment de bougies pour calculer les MA + volume actuel
+            max_period = max(self.volume_ma_periods)
+            klines_all = self.binance_client.get_klines(
+                symbol=symbol,
+                interval=Client.KLINE_INTERVAL_1HOUR,
+                limit=max_period + 2  # +2 pour avoir la bougie actuelle
+            )
             
-            # Calculer les moyennes mobiles du volume : MA13, MA25, MA32, MA100, MA200, MA300
+            # Volume et prix de la dernière bougie COMPLÈTE (avant-dernière)
+            last_complete_candle = klines_all[-2]
+            current_volume = float(last_complete_candle[5])  # Volume
+            current_price = float(last_complete_candle[4])   # Close
+            
+            # Calculer les moyennes mobiles du volume (exclure la bougie en cours)
             volume_mas = {}
+            volumes_history = [float(k[5]) for k in klines_all[:-1]]  # Toutes sauf la dernière
             
             for period in self.volume_ma_periods:
-                klines = self.binance_client.get_klines(
-                    symbol=symbol,
-                    interval=Client.KLINE_INTERVAL_1HOUR,
-                    limit=period + 1
-                )
-                # Exclure la bougie en cours (dernière)
-                volumes = [float(k[5]) for k in klines[:-1]]
-                if len(volumes) > 0:
-                    volume_mas[f'ma{period}'] = sum(volumes) / len(volumes)
+                if len(volumes_history) >= period:
+                    # Prendre les N dernières valeurs
+                    recent_volumes = volumes_history[-period:]
+                    volume_mas[f'ma{period}'] = sum(recent_volumes) / len(recent_volumes)
                 else:
-                    volume_mas[f'ma{period}'] = 0
+                    volume_mas[f'ma{period}'] = sum(volumes_history) / len(volumes_history)
             
             # Références : MA25 pour court terme, MA300 pour long terme
             avg_volume_short = volume_mas.get('ma25', current_volume)
@@ -118,8 +122,8 @@ class VolumeMonitor:
                 'type': 'crypto',
                 'current_volume': current_volume,
                 'current_price': current_price,
-                'avg_volume_24h': avg_volume_short,  # MA25
-                'avg_volume_7d': avg_volume_long,    # MA300
+                'avg_volume_24h': avg_volume_short,
+                'avg_volume_7d': avg_volume_long,
                 'volume_ma13': volume_mas.get('ma13', 0),
                 'volume_ma25': volume_mas.get('ma25', 0),
                 'volume_ma32': volume_mas.get('ma32', 0),
