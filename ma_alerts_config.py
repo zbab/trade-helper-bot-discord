@@ -1,0 +1,28 @@
+{
+  "check_interval_minutes": 60,
+  "webhook_url": "https://discord.com/api/webhooks/1456784904514699536/8NyWL1s9Hb2l2MEk8-4Dwm2SFHV7YerUiD0yPQXCm8h3M9DrttA62LSeHkYs-8KBYXAM",
+  "cooldown_hours": 4,
+  "compression_threshold": 3.0,
+  "assets": {
+    "crypto": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "stocks": [
+      "AAPL",
+      "MSFT",
+      "NVDA",
+      "TSLA"
+    ]
+  },
+  "timeframes": [
+    "4h",
+    "1d"
+  ],
+  "alert_types": {
+    "golden_cross": true,
+    "death_cross": true,
+    "alignment": true,
+    "compression": true
+  }
+}

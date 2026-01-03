@@ -9,6 +9,7 @@ from symbol_search import BinanceSymbolSearch, YFinanceSymbolSearch
 from volume_monitor import VolumeMonitor
 import asyncio
 from datetime import datetime
+from ma_alerts import MAAlertMonitor
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -27,6 +28,7 @@ stock_manager = StockManager()
 crypto_searcher = BinanceSymbolSearch()
 stock_searcher = YFinanceSymbolSearch()
 volume_monitor = VolumeMonitor()
+ma_alert_monitor = MAAlertMonitor()
 
 # Supprimer la commande help par défaut
 bot.remove_command('help')
@@ -43,6 +45,10 @@ async def on_ready():
         volume_check_task.start()
         print('🔍 Surveillance des volumes activée')
 
+    # Démarrer la surveillance des croisements MA
+    if not ma_alert_check_task.is_running():
+        ma_alert_check_task.start()
+        print('🔍 Surveillance des croisements MA activée')
 # Tâche de surveillance des volumes (toutes les 15 minutes)
 @tasks.loop(minutes=15)
 async def volume_check_task():
@@ -69,6 +75,30 @@ async def before_volume_check():
     """Attendre que le bot soit prêt avant de démarrer la surveillance"""
     await bot.wait_until_ready()
 
+# Tâche de surveillance des croisements MA (toutes les heures)
+@tasks.loop(minutes=60)
+async def ma_alert_check_task():
+    """Vérifie les croisements MA et envoie des alertes"""
+    print(f"🔍 Vérification croisements MA - {datetime.now().strftime('%H:%M:%S')}")
+    
+    try:
+        loop = asyncio.get_event_loop()
+        alerts = await loop.run_in_executor(None, ma_alert_monitor.check_all_assets)
+        
+        if alerts:
+            print(f"✅ {len(alerts)} alerte(s) MA envoyée(s)")
+            for alert in alerts:
+                print(f"   └ {alert['symbol']}: {alert['type']} ({alert['system']})")
+        else:
+            print("   Aucun croisement/alignement détecté")
+            
+    except Exception as e:
+        print(f"❌ Erreur surveillance MA: {e}")
+
+@ma_alert_check_task.before_loop
+async def before_ma_alert_check():
+    """Attendre que le bot soit prêt"""
+    await bot.wait_until_ready()
 # ============================================================================
 # COMMANDES DE CALCUL DE POSITION
 # ============================================================================
@@ -1226,6 +1256,181 @@ async def volume_test(ctx):
         await ctx.edit(content=f"❌ Erreur lors du test: {str(e)}")
 
 # ============================================================================
+# COMMANDES DE SURVEILLANCE DES CROISEMENTS MA
+# ============================================================================
+
+@bot.slash_command(name="ma_alerts_config", description="Configuration des alertes MA")
+async def ma_alerts_config(ctx):
+    await ctx.defer()
+    
+    try:
+        config = ma_alert_monitor.config
+        
+        embed = discord.Embed(
+            title="⚙️ Configuration Alertes MA",
+            description="Surveillance des croisements, alignements et compressions",
+            color=discord.Color.gold()
+        )
+        
+        embed.add_field(
+            name="🕐 Paramètres",
+            value=(
+                f"**Fréquence:** Toutes les {config['check_interval_minutes']} minutes\n"
+                f"**Cooldown:** {config['cooldown_hours']} heures\n"
+                f"**Seuil compression:** < {config['compression_threshold']}%"
+            ),
+            inline=False
+        )
+        
+        # Timeframes
+        tf_text = ", ".join(config['timeframes'])
+        embed.add_field(
+            name="⏰ Timeframes surveillés",
+            value=tf_text,
+            inline=False
+        )
+        
+        # Types d'alertes
+        alert_types = []
+        if config['alert_types']['golden_cross']:
+            alert_types.append("✅ Golden Cross")
+        if config['alert_types']['death_cross']:
+            alert_types.append("✅ Death Cross")
+        if config['alert_types']['alignment']:
+            alert_types.append("✅ Alignements")
+        if config['alert_types']['compression']:
+            alert_types.append("✅ Compressions")
+        
+        embed.add_field(
+            name="🔔 Types d'alertes actives",
+            value="\n".join(alert_types),
+            inline=False
+        )
+        
+        # Systèmes MA
+        embed.add_field(
+            name="━━━━━━━━━━━━━━━━━━━━━━",
+            value="** **",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📈 Système 1 (Court terme)",
+            value="**MA:** 13, 25, 32, 100, 200, 300\n**Pairs surveillées:** 13/25, 25/32, 32/100, 100/200, 200/300",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📈 Système 2 (Long terme)",
+            value="**MA:** 112, 336, 375, 448, 750\n**Pairs surveillées:** 112/336, 336/375, 375/448, 448/750",
+            inline=False
+        )
+        
+        # Assets
+        embed.add_field(
+            name="━━━━━━━━━━━━━━━━━━━━━━",
+            value="** **",
+            inline=False
+        )
+        
+        crypto_list = ", ".join([s.replace('USDT', '') for s in config['assets']['crypto']])
+        stock_list = ", ".join(config['assets']['stocks'])
+        
+        embed.add_field(
+            name="₿ Cryptos",
+            value=crypto_list,
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📈 Stocks",
+            value=stock_list,
+            inline=True
+        )
+        
+        embed.set_footer(text="💡 Alertes envoyées automatiquement sur le channel configuré")
+        
+        await ctx.respond(embed=embed)
+        
+    except Exception as e:
+        await ctx.respond(f"❌ Erreur: {str(e)}")
+
+@bot.slash_command(name="ma_alerts_test", description="Tester la surveillance MA immédiatement")
+async def ma_alerts_test(ctx):
+    await ctx.defer()
+    
+    try:
+        await ctx.respond("🔍 Lancement du test de surveillance MA...\n⏳ Cela peut prendre 30-60 secondes...")
+        
+        loop = asyncio.get_event_loop()
+        alerts = await loop.run_in_executor(None, ma_alert_monitor.check_all_assets)
+        
+        if alerts:
+            alert_text = ""
+            for a in alerts:
+                compression_info = f" ({a.get('compression', 0):.2f}%)" if 'compression' in a else ""
+                alert_text += f"• **{a['symbol']}**: {a['type']} ({a['system']}){compression_info}\n"
+            
+            embed = discord.Embed(
+                title="✅ Test terminé - Alertes envoyées",
+                description=alert_text,
+                color=discord.Color.green()
+            )
+            await ctx.edit(content=None, embed=embed)
+        else:
+            embed = discord.Embed(
+                title="✅ Test terminé",
+                description="ℹ️ Aucun croisement/alignement/compression détecté pour le moment.",
+                color=discord.Color.blue()
+            )
+            await ctx.edit(content=None, embed=embed)
+            
+    except Exception as e:
+        await ctx.edit(content=f"❌ Erreur lors du test: {str(e)}")
+
+@bot.slash_command(name="ma_alerts_status", description="Voir les dernières alertes envoyées")
+async def ma_alerts_status(ctx):
+    await ctx.defer()
+    
+    try:
+        history = ma_alert_monitor.alert_history
+        
+        if not history:
+            await ctx.respond("ℹ️ Aucune alerte MA envoyée récemment.")
+            return
+        
+        # Trier par date (plus récent en premier)
+        sorted_alerts = sorted(history.items(), key=lambda x: x[1], reverse=True)
+        
+        embed = discord.Embed(
+            title="📋 Historique des Alertes MA",
+            description=f"Dernières {min(len(sorted_alerts), 10)} alertes",
+            color=discord.Color.blue()
+        )
+        
+        for i, (alert_key, timestamp) in enumerate(sorted_alerts[:10], 1):
+            # Parser le alert_key
+            parts = alert_key.split('_')
+            symbol = parts[0].replace('USDT', '').replace('BUSD', '')
+            timeframe = parts[1] if len(parts) > 1 else 'N/A'
+            alert_type = parts[-1] if len(parts) > 2 else 'N/A'
+            
+            time_ago = datetime.now() - timestamp
+            hours_ago = int(time_ago.total_seconds() / 3600)
+            
+            embed.add_field(
+                name=f"{i}. {symbol} - {alert_type}",
+                value=f"Timeframe: {timeframe}\nIl y a {hours_ago}h",
+                inline=True
+            )
+        
+        embed.set_footer(text=f"Cooldown: {ma_alert_monitor.config['cooldown_hours']}h entre chaque alerte")
+        
+        await ctx.respond(embed=embed)
+        
+    except Exception as e:
+        await ctx.respond(f"❌ Erreur: {str(e)}")
+# ============================================================================
 # COMMANDE HELP
 # ============================================================================
 
@@ -1320,6 +1525,17 @@ async def help_command(ctx):
         ),
         inline=False
     )
+
+    embed.add_field(
+    name="📈 Alertes Croisements MA",
+    value=(
+        "`/ma_alerts_config` - Configuration\n"
+        "`/ma_alerts_test` - Test immédiat\n"
+        "`/ma_alerts_status` - Historique\n"
+        "└ 2 systèmes: Court (13-300) + Long (112-750)"
+    ),
+    inline=False
+)
     
     embed.set_footer(
         text=f"💡 {crypto_manager.get_count()} crypto(s) | {stock_manager.get_count()} stock(s) | Surveillance: ON 🔥"
