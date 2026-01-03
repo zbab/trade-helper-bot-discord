@@ -1232,7 +1232,7 @@ async def volume_test(ctx):
 @bot.slash_command(name="help", description="Afficher toutes les commandes disponibles")
 async def help_command(ctx):
     embed = discord.Embed(
-        title="📚 Guide TEST GIT des Commandes - Trading Helper Bot",
+        title="📚 Guide des Commandes - Trading Helper Bot",
         description="Bot d'aide au trading avec calculs de position et analyse technique",
         color=discord.Color.blue()
     )
