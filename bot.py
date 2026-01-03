@@ -1530,7 +1530,7 @@ async def help_command(ctx):
     name="📈 Alertes Croisements MA",
     value=(
         "`/ma_alerts_config` - Configuration\n"
-        "`/ma_alerts_test` - Test immédiat\n"
+        "`/ma_alerts_test` - Test imédiat\n"
         "`/ma_alerts_status` - Historique\n"
         "└ 2 systèmes: Court (13-300) + Long (112-750)"
     ),
