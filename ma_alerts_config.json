@@ -12,7 +12,9 @@
       "AAPL",
       "MSFT",
       "NVDA",
-      "TSLA"
+      "TSLA",
+      "GOOGL",
+      "META"
     ]
   },
   "timeframes": [
