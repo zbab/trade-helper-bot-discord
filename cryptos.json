@@ -2,5 +2,7 @@
   "BTC": "BTCUSDT",
   "ETH": "ETHUSDT",
   "AVAX": "AVAXUSDT",
-  "ASTER": "ASTERUSDT"
+  "ASTER": "ASTERUSDT",
+  "SOL": "SOLUSDT",
+  "AAVE": "AAVEUSDT"
 }

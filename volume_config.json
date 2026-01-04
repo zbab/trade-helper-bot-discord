@@ -14,16 +14,17 @@
   "assets": {
     "crypto": [
       "BTCUSDT",
-      "ETHUSDT"
+      "ETHUSDT",
+      "AVAXUSDT",
+      "ASTERUSDT",
+      "SOLUSDT",
+      "AAVEUSDT"
     ],
     "stocks": [
       "AAPL",
-      "AMZN",
-      "GOOGL",
-      "META",
       "MSFT",
-      "NVDA",
-      "TSLA"
+      "^GSPC",
+      "TTE"
     ]
   }
 }

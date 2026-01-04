@@ -1,5 +1,6 @@
 {
   "AAPL": "AAPL",
   "MSFT": "MSFT",
-  "SPX": "^GSPC"
+  "SPX": "^GSPC",
+  "TTE": "TTE"
 }
