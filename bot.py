@@ -378,8 +378,8 @@ async def crypto_autocomplete(ctx: discord.AutocompleteContext):
     """Autocomplétion pour les cryptos disponibles"""
     return crypto_manager.get_crypto_symbols()
 
-@bot.slash_command(name="ma_check", description="Vérifier l'état des moyennes mobiles d'une crypto")
-async def ma_check(
+@bot.slash_command(name="crypto_check", description="Vérifier l'état des moyennes mobiles d'une crypto")
+async def crypto_check(
     ctx,
     crypto: str = discord.Option(
         str,
@@ -504,8 +504,8 @@ async def ma_check(
     except Exception as e:
         await ctx.respond(f"❌ Erreur lors de l'analyse: {str(e)}")
 
-@bot.slash_command(name="ma_compare", description="Comparer toutes les cryptos")
-async def ma_compare(
+@bot.slash_command(name="crypto_compare", description="Comparer toutes les cryptos")
+async def crypto_compare(
     ctx,
     timeframe: str = discord.Option(
         str,
@@ -1593,9 +1593,9 @@ async def help_command(ctx):
     embed.add_field(
         name="₿ Analyse Crypto (Binance)",
         value=(
-            "`/ma_check <crypto> [timeframe]` - Analyser les MA\n"
+            "`/crypto_check <crypto> [timeframe]` - Analyser les MA\n"
             "  └ Timeframes: 5m, 15m, 1h, 4h, 1d\n"
-            "`/ma_compare [timeframe]` - Comparer toutes les cryptos\n"
+            "`/crypto_compare [timeframe]` - Comparer toutes les cryptos\n"
             "`/crypto_list` - Lister les cryptos\n"
             "`/crypto_search <terme>` - Rechercher un symbole 🔍\n"
             "`/crypto_add <symbol>` - Ajouter (auto-détection) 🆕\n"
@@ -1652,7 +1652,7 @@ async def help_command(ctx):
             "`/crypto_search doge` → Trouver DOGEUSDT\n"
             "`/crypto_add symbol:DOGE` → Ajout auto ✨\n\n"
             "**Analyse:**\n"
-            "`/ma_check crypto:BTC timeframe:1h`\n"
+            "`/crypto_check crypto:BTC timeframe:1h`\n"
             "`/stock_check stock:AAPL timeframe:1d`\n\n"
             "**Surveillance:**\n"
             "`/volume_status` → État des volumes\n"
