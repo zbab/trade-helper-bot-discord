@@ -615,14 +615,14 @@ async def crypto_check(
         
         compression = analysis['compression_pct']
         is_compressed = analysis['is_compressed']
-        
+
         if is_compressed:
-            compression_status = "🔥 COMPRESSION DÉTECTÉE!"
+            compression_status = f"🔥 COMPRESSION DÉTECTÉE! ({compression:.2f}%)"
             compression_color = "```diff\n+ ALERTE COMPRESSION\n```"
         else:
-            compression_status = "Normale"
-            compression_color = f"```\n{compression:.2f}%\n```"
-        
+            compression_status = f"Normale ({compression:.2f}%)"
+            compression_color = "```\nPas de compression\n```"
+
         embed.add_field(
             name="📊 Compression",
             value=f"{compression_status}\n{compression_color}",
@@ -1103,14 +1103,14 @@ async def stock_check(
         # Compression
         compression = analysis['compression_pct']
         is_compressed = analysis['is_compressed']
-        
+
         if is_compressed:
-            compression_status = "🔥 COMPRESSION DÉTECTÉE!"
+            compression_status = f"🔥 COMPRESSION DÉTECTÉE! ({compression:.2f}%)"
             compression_color = "```diff\n+ ALERTE COMPRESSION\n```"
         else:
-            compression_status = "Normale"
-            compression_color = f"```\n{compression:.2f}%\n```"
-        
+            compression_status = f"Normale ({compression:.2f}%)"
+            compression_color = "```\nPas de compression\n```"
+
         embed.add_field(
             name="📊 Compression",
             value=f"{compression_status}\n{compression_color}",
@@ -1245,7 +1245,7 @@ async def stock_compare(
         
     except Exception as e:
         await ctx.respond(f"❌ Erreur: {str(e)}")
-        
+
 # ============================================================================
 # COMMANDES STOCKS - GESTION
 # ============================================================================
