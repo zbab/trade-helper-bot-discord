@@ -182,11 +182,22 @@ async def leverage(
         await ctx.respond("⚠️ Attention: Levier très élevé (max généralement 125x)")
     
     is_long = entry > stop_loss
+    
+    # Calcul du risque
     risk_per_unit = abs(entry - stop_loss)
     risk_percent = (risk_per_unit / entry) * 100
+    
+    # Avec levier
     effective_capital = capital * leverage
     quantity = effective_capital / entry
+    
+    # Marge requise (sans levier ce serait la valeur totale)
     margin_required = effective_capital / leverage
+    
+    # Pourcentage du capital utilisé comme marge
+    capital_percent_used = (margin_required / capital) * 100
+    
+    # Perte maximale = capital risqué
     max_loss = capital
     
     embed = discord.Embed(
@@ -197,7 +208,11 @@ async def leverage(
     embed.add_field(name="Type", value=f"{'🟢 LONG' if is_long else '🔴 SHORT'}", inline=False)
     embed.add_field(name="Capital risqué", value=f"${capital:,.2f}", inline=True)
     embed.add_field(name="Levier", value=f"{leverage}x", inline=True)
-    embed.add_field(name="Marge requise", value=f"${margin_required:,.2f}", inline=True)
+    embed.add_field(
+        name="Marge requise", 
+        value=f"${margin_required:,.2f} ({capital_percent_used:.1f}% du capital)", 
+        inline=True
+    )
     embed.add_field(name="Prix d'entrée", value=f"${entry:,.4f}", inline=True)
     embed.add_field(name="Stop Loss", value=f"${stop_loss:,.4f}", inline=True)
     embed.add_field(name="Risque", value=f"{risk_percent:.2f}%", inline=True)
@@ -206,6 +221,7 @@ async def leverage(
     embed.add_field(name="Perte maximale", value=f"${max_loss:,.2f}", inline=True)
     
     embed.set_footer(text="⚠️ Le levier amplifie les gains ET les pertes!")
+    
     await ctx.respond(embed=embed)
 
 @bot.slash_command(name="rr", description="Calculer rapidement le ratio risque/rendement")
