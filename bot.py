@@ -85,12 +85,12 @@ async def ma_alert_check_task():
         loop = asyncio.get_event_loop()
         
         # Premier run : warm-up silencieux
-        if not hasattr(ma_alert_check_task, 'warmed_up'):
-            print("⏳ Premier démarrage - Mode warm-up (pas d'alertes)")
-            alerts = await loop.run_in_executor(None, ma_alert_monitor.check_all_assets, True)
-            ma_alert_check_task.warmed_up = True
-            print(f"✅ Warm-up terminé - {len(alerts)} état(s) enregistré(s)")
-            return
+        # if not hasattr(ma_alert_check_task, 'warmed_up'):
+        #     print("⏳ Premier démarrage - Mode warm-up (pas d'alertes)")
+        #     alerts = await loop.run_in_executor(None, ma_alert_monitor.check_all_assets, True)
+        #     ma_alert_check_task.warmed_up = True
+        #     print(f"✅ Warm-up terminé - {len(alerts)} état(s) enregistré(s)")
+        #     return
         
         # Runs suivants : normal
         alerts = await loop.run_in_executor(None, ma_alert_monitor.check_all_assets, False)
