@@ -1,0 +1,10 @@
+{
+  "check_interval_minutes": 15,
+  "webhook_url": "YOUR_WEBHOOK_URL_HERE",
+  "cooldown_minutes": 30,
+  "thresholds": {
+    "moderate": 150,
+    "high": 200,
+    "critical": 300
+  }
+}

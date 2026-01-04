@@ -1,0 +1,11 @@
+{
+  "check_interval_minutes": 60,
+  "webhooks": {
+    "compression": "YOUR_WEBHOOK_URL_HERE",
+    "cross": "YOUR_WEBHOOK_URL_HERE",
+    "alignment": "YOUR_WEBHOOK_URL_HERE"
+  },
+  "cooldown_hours": 4,
+  "compression_threshold": 3.0,
+  "timeframes": ["15m", "1h", "4h", "1d"]
+}
