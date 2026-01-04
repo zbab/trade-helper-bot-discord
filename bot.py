@@ -1058,6 +1058,7 @@ async def stock_check(
             await ctx.respond(f"❌ Erreur: {analysis.get('message', 'Erreur inconnue')}")
             return
         
+        # Déterminer la couleur selon l'alignement
         if analysis['aligned_bullish']:
             color = discord.Color.green()
             status_emoji = "🟢"
@@ -1077,6 +1078,7 @@ async def stock_check(
             color=color
         )
         
+        # Prix actuel
         current_price = analysis['current_price']
         embed.add_field(
             name="💰 Prix Actuel",
@@ -1084,6 +1086,7 @@ async def stock_check(
             inline=False
         )
         
+        # Moyennes mobiles
         ma_values = analysis['ma_values']
         ma_text = ""
         for period in [112, 336, 375, 448, 750]:
@@ -1097,6 +1100,7 @@ async def stock_check(
             inline=True
         )
         
+        # Compression
         compression = analysis['compression_pct']
         is_compressed = analysis['is_compressed']
         
@@ -1113,6 +1117,7 @@ async def stock_check(
             inline=True
         )
         
+        # Position du prix
         if analysis['price_above_all_ma']:
             price_position = "🟢 Au-dessus de toutes les MA"
         elif analysis['price_below_all_ma']:
@@ -1126,6 +1131,7 @@ async def stock_check(
             inline=False
         )
         
+        # Ordre actuel
         current_order = analysis['current_order']
         order_text = " > ".join([f"MA{p}" for p in current_order])
         embed.add_field(
@@ -1134,6 +1140,7 @@ async def stock_check(
             inline=False
         )
         
+        # Distances entre MA
         distances = analysis.get('ma_distances', {})
         if distances:
             dist_text = ""
@@ -1194,6 +1201,7 @@ async def stock_compare(
                     )
                     continue
                 
+                # Déterminer le statut
                 if analysis['aligned_bullish']:
                     status = "🟢 Haussier"
                     if analysis['is_compressed']:
@@ -1223,6 +1231,7 @@ async def stock_compare(
                     inline=True
                 )
         
+        # Alertes importantes
         if alerts:
             embed.add_field(
                 name="🔥 ALERTES",
@@ -1236,7 +1245,7 @@ async def stock_compare(
         
     except Exception as e:
         await ctx.respond(f"❌ Erreur: {str(e)}")
-
+        
 # ============================================================================
 # COMMANDES STOCKS - GESTION
 # ============================================================================
