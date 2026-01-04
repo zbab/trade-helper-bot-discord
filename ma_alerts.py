@@ -75,7 +75,7 @@ class MAAlertMonitor:
             self.config['webhooks'][alert_type] = webhook_url
         
         self._save_config()
-        
+
     def _can_send_alert(self, alert_key: str) -> bool:
         """Vérifie cooldown (éviter spam)"""
         if alert_key not in self.alert_history:
@@ -519,3 +519,16 @@ class MAAlertMonitor:
                     })
         
         return alerts
+    
+    def sync_assets_from_managers(self, crypto_symbols: List[str], stock_symbols: List[str]):
+        """
+        Synchronise les actifs surveillés avec les managers crypto/stock
+        
+        Args:
+            crypto_symbols: Liste des symboles Binance (ex: ['BTCUSDT', 'ETHUSDT'])
+            stock_symbols: Liste des symboles stocks (ex: ['AAPL', 'MSFT'])
+        """
+        self.config['assets']['crypto'] = crypto_symbols
+        self.config['assets']['stocks'] = stock_symbols
+        self._save_config()
+        print(f"✅ MA Alerts: Actifs synchronisés - {len(crypto_symbols)} cryptos, {len(stock_symbols)} stocks")

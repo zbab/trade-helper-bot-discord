@@ -395,3 +395,16 @@ class VolumeMonitor:
                 status['stocks'].append(data)
         
         return status
+
+    def sync_assets_from_managers(self, crypto_symbols: List[str], stock_symbols: List[str]):
+        """
+        Synchronise les actifs surveillés avec les managers crypto/stock
+        
+        Args:
+            crypto_symbols: Liste des symboles Binance (ex: ['BTCUSDT', 'ETHUSDT'])
+            stock_symbols: Liste des symboles stocks (ex: ['AAPL', 'MSFT'])
+        """
+        self.config['assets']['crypto'] = crypto_symbols
+        self.config['assets']['stocks'] = stock_symbols
+        self._save_config()
+        print(f"✅ Volume: Actifs synchronisés - {len(crypto_symbols)} cryptos, {len(stock_symbols)} stocks")

@@ -109,6 +109,26 @@ async def ma_alert_check_task():
 async def before_ma_alert_check():
     """Attendre que le bot soit prêt"""
     await bot.wait_until_ready()
+
+def sync_alerts_with_managers():
+    """Synchronise les alertes avec les actifs des managers"""
+    # Récupérer tous les symboles Binance
+    crypto_symbols = [
+        crypto_manager.get_binance_symbol(symbol) 
+        for symbol in crypto_manager.get_crypto_symbols()
+    ]
+    
+    # Récupérer tous les symboles stocks
+    stock_symbols = [
+        stock_manager.get_yfinance_symbol(symbol)
+        for symbol in stock_manager.get_stock_symbols()
+    ]
+    
+    # Synchroniser
+    volume_monitor.sync_assets_from_managers(crypto_symbols, stock_symbols)
+    ma_alert_monitor.sync_assets_from_managers(crypto_symbols, stock_symbols)
+    
+    print(f"🔄 Synchronisation terminée: {len(crypto_symbols)} cryptos, {len(stock_symbols)} stocks")
 # ============================================================================
 # COMMANDES DE CALCUL DE POSITION
 # ============================================================================
@@ -726,13 +746,15 @@ async def crypto_add(
         return
     
     if crypto_manager.add_crypto(symbol, binance_symbol):
+        sync_alerts_with_managers()
+        
         embed = discord.Embed(
             title="✅ Crypto Ajoutée",
             color=discord.Color.green()
         )
         embed.add_field(name="Symbole", value=symbol, inline=True)
         embed.add_field(name="Binance", value=binance_symbol, inline=True)
-        embed.set_footer(text=f"Total: {crypto_manager.get_count()} crypto(s)")
+        embed.set_footer(text=f"Total: {crypto_manager.get_count()} crypto(s) • Alertes synchronisées ✓")
         
         await ctx.edit(content=None, embed=embed)
     else:
@@ -756,16 +778,82 @@ async def crypto_remove(
         return
     
     if crypto_manager.remove_crypto(crypto):
+        # ✅ SYNCHRONISER LES ALERTES ← AJOUT ICI
+        sync_alerts_with_managers()
+        
         embed = discord.Embed(
             title="✅ Crypto Supprimée",
             description=f"La crypto **{crypto}** a été supprimée",
             color=discord.Color.orange()
         )
-        embed.set_footer(text=f"Total: {crypto_manager.get_count()} crypto(s) restante(s)")
+        embed.set_footer(text=f"Total: {crypto_manager.get_count()} crypto(s) restante(s) • Alertes synchronisées ✓")
         
         await ctx.respond(embed=embed)
     else:
         await ctx.respond("❌ Erreur lors de la suppression")
+
+@bot.slash_command(name="alerts_sync", description="Synchroniser les alertes avec les actifs configurés")
+async def alerts_sync(ctx):
+    await ctx.defer()
+    
+    try:
+        # Avant sync
+        before_crypto_count = len(volume_monitor.config['assets']['crypto'])
+        before_stock_count = len(volume_monitor.config['assets']['stocks'])
+        
+        # Synchroniser
+        sync_alerts_with_managers()
+        
+        # Après sync
+        after_crypto_count = len(volume_monitor.config['assets']['crypto'])
+        after_stock_count = len(volume_monitor.config['assets']['stocks'])
+        
+        embed = discord.Embed(
+            title="✅ Synchronisation des Alertes",
+            description="Les alertes ont été synchronisées avec vos actifs configurés",
+            color=discord.Color.green()
+        )
+        
+        embed.add_field(
+            name="📊 Cryptos",
+            value=f"Avant: {before_crypto_count}\nAprès: {after_crypto_count}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="📈 Stocks",
+            value=f"Avant: {before_stock_count}\nAprès: {after_stock_count}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="\u200b",
+            value="\u200b",
+            inline=True
+        )
+        
+        # Liste des actifs
+        crypto_list = ", ".join([s.replace('USDT', '') for s in volume_monitor.config['assets']['crypto']])
+        stock_list = ", ".join(volume_monitor.config['assets']['stocks'])
+        
+        embed.add_field(
+            name="₿ Cryptos surveillées",
+            value=crypto_list or "Aucune",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📈 Stocks surveillés",
+            value=stock_list or "Aucun",
+            inline=False
+        )
+        
+        embed.set_footer(text="Les alertes de volume et MA sont maintenant à jour")
+        
+        await ctx.respond(embed=embed)
+        
+    except Exception as e:
+        await ctx.respond(f"❌ Erreur lors de la synchronisation: {str(e)}")
 # ============================================================================
 # COMMANDES STOCKS - ANALYSE DE MOYENNES MOBILES
 # ============================================================================
@@ -1106,13 +1194,16 @@ async def stock_add(
         return
     
     if stock_manager.add_stock(symbol, yfinance_symbol):
+        # ✅ SYNCHRONISER LES ALERTES ← AJOUT ICI
+        sync_alerts_with_managers()
+        
         embed = discord.Embed(
             title="✅ Stock Ajouté",
             color=discord.Color.green()
         )
         embed.add_field(name="Symbole", value=symbol, inline=True)
         embed.add_field(name="Yahoo Finance", value=yfinance_symbol, inline=True)
-        embed.set_footer(text=f"Total: {stock_manager.get_count()} stock(s)")
+        embed.set_footer(text=f"Total: {stock_manager.get_count()} stock(s) • Alertes synchronisées ✓")
         
         await ctx.edit(content=None, embed=embed)
     else:
@@ -1136,12 +1227,15 @@ async def stock_remove(
         return
     
     if stock_manager.remove_stock(stock):
+        # ✅ SYNCHRONISER LES ALERTES ← AJOUT ICI
+        sync_alerts_with_managers()
+        
         embed = discord.Embed(
             title="✅ Stock Supprimé",
             description=f"Le stock **{stock}** a été supprimé",
             color=discord.Color.orange()
         )
-        embed.set_footer(text=f"Total: {stock_manager.get_count()} stock(s) restant(s)")
+        embed.set_footer(text=f"Total: {stock_manager.get_count()} stock(s) restant(s) • Alertes synchronisées ✓")
         
         await ctx.respond(embed=embed)
     else:
