@@ -17,7 +17,7 @@ class MAAlertMonitor:
         self.alert_history = {}  # Pour éviter spam
         
         # Deux systèmes de MA
-        self.ma_system1 = [13, 25, 32, 100, 200, 300]  # Court terme
+        self.ma_system1 = [13, 25, 32, 50, 100, 200, 300]  # Court terme
         self.ma_system2 = [112, 336, 375, 448, 750]    # Long terme
         
         # État précédent pour détecter les croisements
@@ -275,6 +275,8 @@ class MAAlertMonitor:
         webhook_map = {
             'golden_cross': 'cross',
             'death_cross': 'cross',
+            'bullish_cross': 'cross',
+            'bearish_cross': 'cross',
             'bullish_alignment': 'alignment',
             'bearish_alignment': 'alignment',
             'compression': 'compression'
@@ -303,6 +305,16 @@ class MAAlertMonitor:
                 'emoji': '🔴',
                 'title': 'DEATH CROSS',
                 'color': 0xFF0000,
+            },
+            'bullish_cross': {
+                'emoji': '🔼',
+                'title': 'CROISEMENT HAUSSIER',
+                'color': 0x90EE90,  # Vert clair
+            },
+            'bearish_cross': {
+                'emoji': '🔽',
+                'title': 'CROISEMENT BAISSIER',
+                'color': 0xFFB6C1,  # Rouge clair
             },
             'bullish_alignment': {
                 'emoji': '🟢',
@@ -457,7 +469,7 @@ class MAAlertMonitor:
         """
         alerts = []
         
-        # 1. Croisements
+        # 1. Croisements (tous + distinction Golden/Death Cross)
         if self.config['alert_types']['golden_cross'] or self.config['alert_types']['death_cross']:
             for i in range(len(ma_system) - 1):
                 ma_fast = ma_system[i]
@@ -466,18 +478,28 @@ class MAAlertMonitor:
                 cross_type = self.detect_cross(data, ma_fast, ma_slow)
                 
                 if cross_type:
-                    alert_key = f"{data['symbol']}_{data['timeframe']}_{system_name}_{ma_fast}_{ma_slow}_{cross_type}"
+                    # Déterminer si c'est un Golden/Death Cross (MA50×MA200) ou un simple croisement
+                    is_golden_death = (ma_fast == 50 and ma_slow == 200)
+                    
+                    if is_golden_death:
+                        # Golden Cross ou Death Cross
+                        alert_type = 'golden_cross' if cross_type == 'golden_cross' else 'death_cross'
+                    else:
+                        # Croisement simple
+                        alert_type = 'bullish_cross' if cross_type == 'golden_cross' else 'bearish_cross'
+                    
+                    alert_key = f"{data['symbol']}_{data['timeframe']}_{system_name}_{ma_fast}_{ma_slow}_{alert_type}"
                     
                     if self._can_send_alert(alert_key):
                         if not silent_mode:
-                            self.send_discord_alert(cross_type, data, {
+                            self.send_discord_alert(alert_type, data, {
                                 'ma_fast': ma_fast,
                                 'ma_slow': ma_slow
                             })
                         self._mark_alert_sent(alert_key)
                         alerts.append({
                             'symbol': data['symbol'],
-                            'type': cross_type,
+                            'type': alert_type,
                             'system': system_name
                         })
         
