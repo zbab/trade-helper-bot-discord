@@ -56,11 +56,26 @@ class MAAlertMonitor:
         with open(self.config_file, 'w') as f:
             json.dump(config, f, indent=2)
     
-    def set_webhook_url(self, webhook_url: str):
-        """Configure l'URL du webhook"""
-        self.config['webhook_url'] = webhook_url
+    def set_webhook_url(self, webhook_url: str, alert_type: str = 'all'):
+        """
+        Configure l'URL d'un webhook
+        
+        Args:
+            webhook_url: URL du webhook
+            alert_type: Type d'alerte ('cross', 'alignment', 'compression', ou 'all')
+        """
+        if 'webhooks' not in self.config:
+            self.config['webhooks'] = {}
+        
+        if alert_type == 'all':
+            self.config['webhooks']['cross'] = webhook_url
+            self.config['webhooks']['alignment'] = webhook_url
+            self.config['webhooks']['compression'] = webhook_url
+        else:
+            self.config['webhooks'][alert_type] = webhook_url
+        
         self._save_config()
-    
+        
     def _can_send_alert(self, alert_key: str) -> bool:
         """Vérifie cooldown (éviter spam)"""
         if alert_key not in self.alert_history:
@@ -254,11 +269,28 @@ class MAAlertMonitor:
         return compression_pct
     
     def send_discord_alert(self, alert_type: str, data: Dict, details: Dict):
-        """Envoie une alerte Discord - FORMAT CLAIR"""
-        webhook_url = self.config.get('webhook_url')
+        """Envoie une alerte Discord - FORMAT CLAIR avec routing par webhook"""
+        
+        # Router vers le bon webhook selon le type d'alerte
+        webhook_map = {
+            'golden_cross': 'cross',
+            'death_cross': 'cross',
+            'bullish_alignment': 'alignment',
+            'bearish_alignment': 'alignment',
+            'compression': 'compression'
+        }
+        
+        webhook_key = webhook_map.get(alert_type)
+        if not webhook_key:
+            print(f"⚠️  Type d'alerte inconnu: {alert_type}")
+            return
+        
+        # Récupérer l'URL du webhook
+        webhooks = self.config.get('webhooks', {})
+        webhook_url = webhooks.get(webhook_key)
         
         if not webhook_url:
-            print("⚠️  Webhook URL non configurée")
+            print(f"⚠️  Webhook non configuré pour: {webhook_key}")
             return
         
         alert_configs = {
@@ -372,7 +404,7 @@ class MAAlertMonitor:
         try:
             response = requests.post(webhook_url, json=payload)
             if response.status_code == 204:
-                print(f"✅ Alerte MA envoyée: {alert_type} - {data['symbol']}")
+                print(f"✅ Alerte MA envoyée: {alert_type} → {webhook_key} - {data['symbol']}")
             else:
                 print(f"❌ Erreur webhook: {response.status_code}")
         except Exception as e:

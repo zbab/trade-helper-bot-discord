@@ -1,6 +1,10 @@
 {
   "check_interval_minutes": 60,
-  "webhook_url": "https://discord.com/api/webhooks/1457147566692237405/6TadQbhC9E6nzMIMhhtSo8Rg-HokAhgsz8IZejAwWEdjjKaE7_vfOSMI4k9OZfmCjxv0",
+  "webhooks": {
+    "compression": "https://discord.com/api/webhooks/1457297388946329612/u9rsKHqjVjroCc2vwFce5p_IB81Mn0dLpSqqjPFtKR8qavYf_jSesJlUNS6BXJ3KhEjW",
+    "cross": "https://discord.com/api/webhooks/1457297388946329612/u9rsKHqjVjroCc2vwFce5p_IB81Mn0dLpSqqjPFtKR8qavYf_jSesJlUNS6BXJ3KhEjW",
+    "alignment": "https://discord.com/api/webhooks/1457298313589297222/qhssrvBpmfGPpENscXc_xFsg54U3YYfJFmgIf4dJTqZbF9dN0Gt0rPylrN58AOClCVbD"
+  },
   "cooldown_hours": 4,
   "compression_threshold": 3.0,
   "assets": {
@@ -12,9 +16,7 @@
       "AAPL",
       "MSFT",
       "NVDA",
-      "TSLA",
-      "GOOGL",
-      "META"
+      "TSLA"
     ]
   },
   "timeframes": [

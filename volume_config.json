@@ -1,6 +1,6 @@
 {
   "check_interval_minutes": 15,
-  "webhook_url": "https://discord.com/api/webhooks/1456784904514699536/8NyWL1s9Hb2l2MEk8-4Dwm2SFHV7YerUiD0yPQXCm8h3M9DrttA62LSeHkYs-8KBYXAM",
+  "webhook_url": "https://discord.com/api/webhooks/1457297958235017288/H4LIHU4cnp8FppI_7Wv_TgvV9lKyuwQXpL0WKd6qlIJcepma1fu_4fJsg4XTJOYNelQk",
   "cooldown_minutes": 30,
   "thresholds": {
     "moderate": 150,
@@ -8,8 +8,8 @@
     "critical": 300
   },
   "reference_periods": {
-    "short": 24,
-    "long": 168
+    "short": 25,
+    "long": 300
   },
   "assets": {
     "crypto": [
