@@ -167,7 +167,8 @@ async def position(
 @bot.slash_command(name="leverage", description="Calculer une position avec effet de levier")
 async def leverage(
     ctx,
-    capital: float = discord.Option(float, description="Capital à risquer ($)"),
+    capital: float = discord.Option(float, description="Capital total disponible ($)"),
+    risk_percent: float = discord.Option(float, description="Pourcentage du capital à risquer (ex: 2 pour 2%)"),
     entry: float = discord.Option(float, description="Prix d'entrée"),
     stop_loss: float = discord.Option(float, description="Prix du stop loss"),
     leverage: int = discord.Option(int, description="Effet de levier (ex: 10 pour 10x)")
@@ -178,27 +179,36 @@ async def leverage(
         await ctx.respond("❌ Toutes les valeurs doivent être positives!")
         return
     
+    if risk_percent <= 0 or risk_percent > 100:
+        await ctx.respond("❌ Le pourcentage de risque doit être entre 0 et 100!")
+        return
+    
     if leverage > 125:
         await ctx.respond("⚠️ Attention: Levier très élevé (max généralement 125x)")
     
     is_long = entry > stop_loss
     
-    # Calcul du risque
+    # Montant à risquer (en $)
+    risk_amount = capital * (risk_percent / 100)
+    
+    # Distance du stop loss (en %)
     risk_per_unit = abs(entry - stop_loss)
-    risk_percent = (risk_per_unit / entry) * 100
+    stop_distance_percent = (risk_per_unit / entry) * 100
     
-    # Avec levier
-    effective_capital = capital * leverage
-    quantity = effective_capital / entry
+    # Taille de position (exposition totale)
+    position_value = risk_amount / (stop_distance_percent / 100)
     
-    # Marge requise (sans levier ce serait la valeur totale)
-    margin_required = effective_capital / leverage
+    # Quantité
+    quantity = position_value / entry
+    
+    # Marge requise (avec levier)
+    margin_required = position_value / leverage
     
     # Pourcentage du capital utilisé comme marge
     capital_percent_used = (margin_required / capital) * 100
     
-    # Perte maximale = capital risqué
-    max_loss = capital
+    # Perte maximale = montant risqué
+    max_loss = risk_amount
     
     embed = discord.Embed(
         title="⚡ Calcul de Position avec Levier",
@@ -206,18 +216,23 @@ async def leverage(
     )
     
     embed.add_field(name="Type", value=f"{'🟢 LONG' if is_long else '🔴 SHORT'}", inline=False)
-    embed.add_field(name="Capital risqué", value=f"${capital:,.2f}", inline=True)
+    embed.add_field(
+        name="Capital & Risque",
+        value=f"Capital: ${capital:,.2f}\nRisque: {risk_percent}% (${risk_amount:,.2f})",
+        inline=False
+    )
     embed.add_field(name="Levier", value=f"{leverage}x", inline=True)
     embed.add_field(
         name="Marge requise", 
-        value=f"${margin_required:,.2f} ({capital_percent_used:.1f}% du capital)", 
+        value=f"${margin_required:,.2f}\n({capital_percent_used:.1f}% du capital)", 
         inline=True
     )
+    embed.add_field(name="\u200b", value="\u200b", inline=True)
     embed.add_field(name="Prix d'entrée", value=f"${entry:,.4f}", inline=True)
     embed.add_field(name="Stop Loss", value=f"${stop_loss:,.4f}", inline=True)
-    embed.add_field(name="Risque", value=f"{risk_percent:.2f}%", inline=True)
+    embed.add_field(name="Distance SL", value=f"{stop_distance_percent:.2f}%", inline=True)
     embed.add_field(name="Quantité", value=f"{quantity:,.4f}", inline=True)
-    embed.add_field(name="Valeur de position", value=f"${effective_capital:,.2f}", inline=True)
+    embed.add_field(name="Exposition totale", value=f"${position_value:,.2f}", inline=True)
     embed.add_field(name="Perte maximale", value=f"${max_loss:,.2f}", inline=True)
     
     embed.set_footer(text="⚠️ Le levier amplifie les gains ET les pertes!")
