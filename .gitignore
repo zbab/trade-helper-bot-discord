@@ -11,3 +11,9 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Dynamic data files
+cryptos.json
+stocks.json
+volume_config.json
+ma_alerts_config.json
