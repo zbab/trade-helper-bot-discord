@@ -37,6 +37,13 @@ bot.remove_command('help')
 async def on_ready():
     print(f'{bot.user} est connecté!')
     print(f'Serveurs: {len(bot.guilds)}')
+
+    try:
+        synced = await bot.sync_commands()
+        print(f'✅ {len(synced)} commande(s) synchronisée(s) avec Discord')
+    except Exception as e:
+        print(f'❌ Erreur lors de la sync des commandes: {e}')
+
     print(f'Cryptos supportées: {", ".join(crypto_manager.get_crypto_symbols())}')
     print(f'Stocks supportés: {", ".join(stock_manager.get_stock_symbols())}')
     
