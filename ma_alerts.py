@@ -374,7 +374,18 @@ class MAAlertMonitor:
                 "value": f"**MA{ma_fast}** croise **MA{ma_slow}** {direction}",
                 "inline": False
             })
-        
+
+        elif alert_type in ['bullish_cross', 'bearish_cross']:
+            ma_fast = details['ma_fast']
+            ma_slow = details['ma_slow']
+            direction = "à la hausse 📈" if alert_type == 'bullish_cross' else "à la baisse 📉"
+            
+            fields.append({
+                "name": "🔄 CROISEMENT DÉTECTÉ",
+                "value": f"**MA{ma_fast}** croise **MA{ma_slow}** {direction}",
+                "inline": False
+            })
+            
         elif alert_type == 'compression':
             compression = details['compression']
             fields.append({
