@@ -8,7 +8,27 @@ class BinanceMarketAnalyzer:
     """Analyseur de marché pour crypto via Binance"""
     
     def __init__(self):
-        self.client = Client()
+        self.client = None
+        self._init_client()
+    
+    def _init_client(self, max_retries=5, retry_delay=10):
+        """Initialiser le client Binance avec retry"""
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                self.client = Client()
+                print(f"✅ Binance client connecté")
+                return
+            except Exception as e:
+                print(f"⚠️ Tentative {attempt + 1}/{max_retries} - Erreur Binance: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                else:
+                    print("❌ Impossible de se connecter à Binance après plusieurs tentatives")
+                    # Créer un client sans ping
+                    self.client = Client(requests_params={'timeout': 10})
+                    
         self.ma_periods = [112, 336, 375, 448, 750]
         
         # Mapping des intervals utilisateur vers Binance
