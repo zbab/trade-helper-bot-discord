@@ -15,11 +15,12 @@
 3. [Installation & Configuration](#installation--configuration)
 4. [Commandes Disponibles](#commandes-disponibles)
 5. [Modules Techniques](#modules-techniques)
-6. [Déploiement & Production](#déploiement--production)
-7. [Maintenance & Monitoring](#maintenance--monitoring)
-8. [Actifs Configurés](#actifs-configurés)
-9. [Configuration des Alertes](#configuration-des-alertes)
-10. [Roadmap & Évolutions](#roadmap--évolutions)
+6. [Cas d'Usage Pratiques](#cas-dusage-pratiques)
+7. [Déploiement & Production](#déploiement--production)
+8. [Maintenance & Monitoring](#maintenance--monitoring)
+9. [Actifs Configurés](#actifs-configurés)
+10. [Configuration des Alertes](#configuration-des-alertes)
+11. [Roadmap & Évolutions](#roadmap--évolutions)
 
 ---
 
@@ -29,8 +30,9 @@
 
 🧮 **Calculs de Trading**
 - Position sizing (spot & levier jusqu'à 125x)
-- Calcul R/R et DCA
-- Liquidation et P&L
+- **Calcul perte au SL + gain au TP** (nouveau !)
+- Calcul R/R, DCA, et liquidation
+- Scénarios P&L et avertissements
 
 📊 **Analyse Technique**
 - 12 moyennes mobiles (MA13 à MA750)
@@ -67,6 +69,11 @@
 #### 💼 Calculs de Trading
 - **Calcul de position spot** : Dimensionnement optimal selon le risque
 - **Calcul avec levier** : Gestion du risque avec effet de levier (Futures/Margin)
+  - Prix de liquidation calculé
+  - **Perte exacte au Stop Loss** (en $ et % du capital)
+  - **Gain potentiel au Take Profit** (avec comparaison gain/perte)
+  - Scénarios P&L (+10%, +5%, -5%, -10%)
+  - Avertissements automatiques (levier élevé, liquidation proche, etc.)
 - **Ratio Risk/Reward** : Calcul automatique du R/R
 - **DCA (Dollar Cost Averaging)** : Prix moyen d'achat
 
@@ -450,29 +457,73 @@ Voir section [Déploiement](#déploiement--production)
 ---
 
 #### /leverage
-**Description:** Calcule une position avec effet de levier (Futures)
+**Description:** Calcule une position avec effet de levier (Futures/Margin Trading)
 
 **Paramètres:**
-- `capital` (obligatoire) : Capital disponible
-- `leverage` (obligatoire) : Levier (2x, 5x, 10x, 20x, 50x, 100x)
-- `risk_percent` (obligatoire) : % de risque
-- `entry` (obligatoire) : Prix d'entrée
-- `stop_loss` (obligatoire) : Stop loss
-- `target` (optionnel) : Prix cible
+- `capital` (obligatoire) : Capital total disponible ($)
+- `leverage_amount` (obligatoire) : Effet de levier (1x, 2x, 5x, 10x, 20x, 50x, 100x, 125x)
+- `risk_percent` (obligatoire) : Pourcentage de risque par trade (ex: 2 pour 2%)
+- `entry` (obligatoire) : Prix d'entrée prévu
+- `stop_loss` (obligatoire) : Prix du stop loss
+- `target` (optionnel) : Prix cible (take profit) pour calcul R/R
 
 **Exemple:**
 ```
-/leverage capital:1000 leverage:10 risk_percent:2 entry:50 stop_loss:49 target:52
+/leverage capital:10000 leverage_amount:10 risk_percent:2 entry:50000 stop_loss:49000 target:52000
 ```
 
-**Résultat:**
-- Marge requise
-- Exposition totale
-- Prix de liquidation
-- Distance à la liquidation
-- P&L au stop/target
-- Ratio R/R
-- ⚠️ Avertissements de sécurité
+**Résultats affichés:**
+
+1. **💰 Capital & Risque**
+   - Capital total
+   - Risque accepté (%)
+   - Montant à risquer ($)
+
+2. **📊 Position**
+   - Exposition totale ($)
+   - Marge utilisée ($ et % du capital)
+   - Quantité d'unités
+
+3. **📍 Prix**
+   - Prix d'entrée
+   - Stop Loss
+   - Target (si fourni)
+   - Distance au SL (%)
+
+4. **🔥 Liquidation**
+   - Prix de liquidation calculé
+   - Distance jusqu'à liquidation (%)
+   - ✅/⚠️ Validation position du SL vs liquidation
+
+5. **❌ Perte au Stop Loss** ⭐ NOUVEAU
+   - 💸 Perte exacte si SL touché ($)
+   - 📉 ROI sur la marge (%)
+   - 📊 % du capital total perdu
+
+6. **⚖️ Ratio Risque/Rendement** (si target fourni)
+   - 🎯 Ratio R/R (ex: 2.00:1)
+   - 💰 Gain à la target ($)
+   - 📈 ROI sur la marge (%)
+   - 💵 **Comparaison Gain vs Perte** ($)
+   - Verdict (Excellent/Bon/Acceptable/Défavorable)
+
+7. **📈 Scénarios P&L** (sur la marge)
+   - +10% : Profit potentiel
+   - +5% : Profit potentiel
+   - -5% : Perte potentielle
+   - -10% : Perte potentielle
+
+8. **⚠️ Avertissements automatiques**
+   - Levier ≥50x (risque élevé)
+   - Marge >80% du capital
+   - Liquidation < 5% de distance
+   - Ratio R/R < 2:1
+
+**Pourquoi c'est utile :**
+- Visualisez EXACTEMENT combien vous perdrez au SL avant d'entrer
+- Comparez directement le gain potentiel vs la perte potentielle
+- Évitez les surprises avec le calcul du prix de liquidation
+- Prenez des décisions éclairées avec les avertissements automatiques
 
 ---
 
@@ -1004,6 +1055,88 @@ class YFinanceSymbolSearch:
     def search(self, search_term: str) -> List[str]:
         """Recherche par mapping puis testing"""
 ```
+
+---
+
+## 💡 CAS D'USAGE PRATIQUES
+
+### Exemple 1 : Calculer une position avec levier
+
+**Situation :** Vous voulez trader BTC avec 10x de levier
+
+**Commande :**
+```
+/leverage capital:10000 leverage_amount:10 risk_percent:2 entry:50000 stop_loss:49000 target:52000
+```
+
+**Ce que le bot calcule pour vous :**
+
+1. **Votre exposition** : Avec $10,000 et 10x de levier, vous pouvez contrôler une position de ~$20,000
+2. **Votre marge** : Combien de votre capital sera utilisé comme marge
+3. **Prix de liquidation** : À quel prix vous serez liquidé (crucial !)
+4. **Perte au SL** : Si le SL est touché à $49,000, vous perdrez exactement **-$2,000** (soit -20% de votre marge)
+5. **Gain au TP** : Si le TP est atteint à $52,000, vous gagnerez **+$4,000** (soit +40% de votre marge)
+6. **Ratio R/R** : 2:1 (vous risquez $2,000 pour gagner $4,000)
+7. **Verdict** : ✅ Bon ratio, trade acceptable
+
+**Pourquoi c'est utile :**
+- Vous savez EXACTEMENT combien vous allez perdre ou gagner AVANT d'entrer
+- Vous voyez immédiatement si le ratio risque/rendement est favorable
+- Le bot vous alerte si le levier est trop élevé ou la liquidation trop proche
+
+### Exemple 2 : Analyser une crypto avec les MA
+
+**Situation :** Vous voulez savoir si BTC est en tendance haussière sur 4h
+
+**Commande :**
+```
+/crypto_check crypto:BTC timeframe:4h
+```
+
+**Le bot affiche :**
+- Position du prix vs les 12 moyennes mobiles
+- ✅ Alignement haussier si prix > toutes les MA
+- 🔥 Compression détectée si MA très proches (<5%)
+- 📈 Golden Cross si MA50 > MA200
+- 📉 Death Cross si MA50 < MA200
+
+### Exemple 3 : Surveiller les volumes automatiquement
+
+**Configuration :**
+1. Le bot vérifie AUTOMATIQUEMENT les volumes toutes les 15 minutes
+2. Si BTC fait +200% de volume vs la moyenne, vous recevez une alerte Discord
+3. Cooldown de 30 minutes pour éviter le spam
+
+**Commandes utiles :**
+```
+/volume_status     # Voir l'état actuel
+/volume_test       # Tester immédiatement
+/volume_config     # Voir la configuration
+```
+
+**Cas concret :**
+- 14:00 → Le bot détecte BTC avec +250% de volume
+- 14:01 → Vous recevez une alerte Discord : "🔥 Volume critique détecté sur BTCUSDT"
+- Vous pouvez réagir rapidement à un potentiel mouvement de prix
+
+### Exemple 4 : Alertes MA automatiques
+
+**Configuration :**
+1. Le bot surveille AUTOMATIQUEMENT les MA toutes les 60 minutes
+2. Si BTC fait un Golden Cross en 1d, vous êtes alerté
+3. Warm-up de 1h au démarrage pour éviter les faux signaux
+
+**Commandes utiles :**
+```
+/ma_alerts_status     # Voir les alertes récentes
+/ma_alerts_test       # Tester immédiatement
+/ma_alerts_config     # Voir la configuration
+```
+
+**Cas concret :**
+- 10:00 → Le bot détecte un Golden Cross sur ETH en 4h
+- 10:01 → Vous recevez un webhook Discord : "📈 Golden Cross détecté : ETHUSDT (4h)"
+- Cooldown de 4h avant de recevoir une nouvelle alerte pour ETH
 
 ---
 

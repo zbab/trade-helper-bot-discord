@@ -277,21 +277,30 @@ async def leverage(
         # Pourcentage du capital utilisé
         capital_used_percent = (margin_required / capital) * 100
         
+        # === CALCUL DE LA PERTE AU STOP LOSS ===
+        # Perte au SL (en $)
+        if is_long:
+            sl_pnl_dollar = (stop_loss - entry) * position_size
+        else:
+            sl_pnl_dollar = (entry - stop_loss) * position_size
+
+        sl_pnl_percent = (sl_pnl_dollar / margin_required) * 100
+
         # === CALCUL DU RATIO R/R SI TARGET FOURNIE ===
         rr_ratio = None
         reward_amount = None
         target_pnl_dollar = None
         target_pnl_percent = None
         rr_verdict = None
-        
+
         if target is not None:
             if target <= 0:
                 await ctx.followup.send("❌ Le prix cible doit être positif !", ephemeral=True)
                 return
-            
+
             # Vérifier la cohérence de la target
             target_valid = (is_long and target > entry) or (not is_long and target < entry)
-            
+
             if not target_valid:
                 await ctx.followup.send(
                     "❌ Configuration invalide !\n"
@@ -300,21 +309,21 @@ async def leverage(
                     ephemeral=True
                 )
                 return
-            
+
             # Calcul du R/R
             risk_per_unit = abs(entry - stop_loss)
             reward_per_unit = abs(target - entry)
             rr_ratio = reward_per_unit / risk_per_unit
-            
+
             # P&L à la target
             if is_long:
                 target_pnl_dollar = (target - entry) * position_size
             else:
                 target_pnl_dollar = (entry - target) * position_size
-            
+
             target_pnl_percent = (target_pnl_dollar / margin_required) * 100
             reward_amount = target_pnl_dollar
-            
+
             # Verdict selon le ratio
             if rr_ratio >= 3:
                 rr_verdict = "✅ Excellent ratio !"
@@ -368,12 +377,19 @@ async def leverage(
             value=f"```\nPrix liquidation  : ${liquidation_price:,.2f}\nDistance liquidation: {liquidation_distance_percent:.2f}%\n\n{warning}```",
             inline=False
         )
-        
+
+        # Afficher la perte au SL
+        embed.add_field(
+            name="❌ Perte au Stop Loss",
+            value=f"```\n💸 Perte si SL touché : {sl_pnl_dollar:,.2f}$\n📉 ROI sur marge     : {sl_pnl_percent:.1f}%\n📊 % du capital total : {(sl_pnl_dollar / capital) * 100:.1f}%```",
+            inline=False
+        )
+
         # Afficher le R/R si calculé
         if rr_ratio is not None:
             embed.add_field(
                 name="⚖️ Ratio Risque/Rendement",
-                value=f"```\n🎯 Ratio R/R       : {rr_ratio:.2f}:1\n💰 Gain à la target: ${reward_amount:,.2f}\n📊 ROI sur marge   : +{target_pnl_percent:.1f}%\n\n{rr_verdict}```",
+                value=f"```\n🎯 Ratio R/R         : {rr_ratio:.2f}:1\n💰 Gain à la target  : +${reward_amount:,.2f}\n📈 ROI sur marge     : +{target_pnl_percent:.1f}%\n💵 Gain vs Perte     : +${reward_amount:,.2f} / {sl_pnl_dollar:,.2f}$\n\n{rr_verdict}```",
                 inline=False
             )
         
@@ -1757,9 +1773,12 @@ async def help_command(ctx):
         name="💼 Calculs de Position",
         value=(
             "`/position` - Calculer une position spot\n"
-            "`/leverage` - Calculer avec effet de levier\n"
-            "`/rr` - Ratio risque/rendement\n"
-            "`/dca` - Prix moyen d'achat"
+            "  └ Capital, entry, SL, TP (optionnel)\n"
+            "`/leverage` - Calculer avec effet de levier 🔥\n"
+            "  └ Capital, levier (1-125x), risque%, entry, SL, TP\n"
+            "  └ Affiche: Liquidation, Perte au SL, Gain au TP, R/R\n"
+            "`/rr` - Ratio risque/rendement rapide\n"
+            "`/dca` - Prix moyen d'achat (DCA)"
         ),
         inline=False
     )
@@ -1823,6 +1842,9 @@ async def help_command(ctx):
     embed.add_field(
         name="💡 Exemples d'utilisation",
         value=(
+            "**Calculs:**\n"
+            "`/leverage capital:10000 leverage_amount:10 risk_percent:2 entry:50000 stop_loss:49000 target:52000`\n"
+            "  → Calcul complet avec perte SL + gain TP\n\n"
             "**Recherche + Ajout:**\n"
             "`/crypto_search doge` → Trouver DOGEUSDT\n"
             "`/crypto_add symbol:DOGE` → Ajout auto ✨\n\n"
@@ -1831,7 +1853,7 @@ async def help_command(ctx):
             "`/stock_check stock:AAPL timeframe:1d`\n\n"
             "**Surveillance:**\n"
             "`/volume_status` → État des volumes\n"
-            "`/volume_test` → Test immédiat"
+            "`/ma_alerts_test` → Test alertes MA"
         ),
         inline=False
     )
