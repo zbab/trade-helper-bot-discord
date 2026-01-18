@@ -407,13 +407,13 @@ Voir section [Déploiement](#déploiement--production)
 | | `/rr` | Ratio Risk/Reward |
 | | `/dca` | Dollar Cost Averaging |
 | **Crypto** | `/crypto_check` | Analyser une crypto |
-| | `/crypto_compare` | Comparer toutes les cryptos |
+| | `/crypto_compare` | Comparer cryptos (toutes ou sélection) ⭐ |
 | | `/crypto_list` | Lister cryptos configurées |
 | | `/crypto_add` | Ajouter une crypto |
 | | `/crypto_remove` | Supprimer une crypto |
 | | `/crypto_search` | Rechercher sur Binance |
 | **Stock** | `/stock_check` | Analyser une action |
-| | `/stock_compare` | Comparer toutes les actions |
+| | `/stock_compare` | Comparer stocks (tous ou sélection) ⭐ |
 | | `/stock_list` | Lister actions configurées |
 | | `/stock_add` | Ajouter une action |
 | | `/stock_remove` | Supprimer une action |
@@ -592,15 +592,37 @@ Voir section [Déploiement](#déploiement--production)
 ---
 
 #### /crypto_compare
-**Description:** Comparer toutes les cryptos configurées
+**Description:** Comparer des cryptos (toutes ou une sélection personnalisée) ⭐ NOUVEAU
 
 **Paramètres:**
-- `timeframe` (optionnel) : 1d par défaut
+- `timeframe` (optionnel) : 5m, 15m, 1h, 4h, **1d** (défaut)
+- `assets` (optionnel) : Cryptos à comparer séparées par des virgules
+
+**Exemples:**
+
+**Mode global** (toutes les cryptos) :
+```
+/crypto_compare timeframe:4h
+```
+
+**Mode sélectif** (cryptos spécifiques) :
+```
+/crypto_compare timeframe:1h assets:BTC,ETH,SOL
+```
 
 **Résultat:**
-- Vue d'ensemble de toutes les cryptos
-- Status de chacune
-- Alertes de compression
+- **Mode** : Global ou Sélection personnalisée
+- **Nombre d'actifs** comparés
+- Prix actuel de chaque crypto
+- Status (🟢 Haussier / 🔴 Baissier / 🟠 Neutre)
+- Compression détectée (🔥 si oui)
+- Écart entre les MA (%)
+- **Alertes** : Compressions importantes
+
+**Cas d'usage :**
+- Comparer uniquement vos cryptos favorites
+- Analyser un secteur spécifique (ex: L1 blockchains)
+- Vue rapide sur toutes vos cryptos configurées
 
 ---
 
@@ -670,12 +692,47 @@ Voir section [Déploiement](#déploiement--production)
 
 **Paramètres:**
 - `stock` : Symbole (AAPL, MSFT, TSLA...)
-- `timeframe` : 1d, 1w, 1mo
+- `timeframe` : 5m, 15m, 1h, 4h, 1d
+
+**Exemple:**
+```
+/stock_check stock:AAPL timeframe:1d
+```
 
 ---
 
 #### /stock_compare
-**Description:** Comparer toutes les actions configurées
+**Description:** Comparer des stocks/indices (tous ou une sélection personnalisée) ⭐ NOUVEAU
+
+**Paramètres:**
+- `timeframe` (optionnel) : 5m, 15m, 1h, 4h, **1d** (défaut)
+- `assets` (optionnel) : Stocks à comparer séparés par des virgules
+
+**Exemples:**
+
+**Mode global** (tous les stocks) :
+```
+/stock_compare timeframe:1d
+```
+
+**Mode sélectif** (stocks spécifiques) :
+```
+/stock_compare timeframe:4h assets:AAPL,MSFT,SPX
+```
+
+**Résultat:**
+- **Mode** : Global ou Sélection personnalisée
+- **Nombre d'actifs** comparés
+- Prix actuel de chaque stock
+- Status (🟢 Haussier / 🔴 Baissier / 🟠 Neutre)
+- Compression détectée (🔥 si oui)
+- Écart entre les MA (%)
+- **Alertes** : Compressions importantes
+
+**Cas d'usage :**
+- Comparer uniquement les FAANG/Magnificent 7
+- Analyser un secteur (ex: Tech, Energy)
+- Comparer indices majeurs (SPX, NASDAQ, DOW)
 
 ---
 
@@ -1084,7 +1141,36 @@ class YFinanceSymbolSearch:
 - Vous voyez immédiatement si le ratio risque/rendement est favorable
 - Le bot vous alerte si le levier est trop élevé ou la liquidation trop proche
 
-### Exemple 2 : Analyser une crypto avec les MA
+### Exemple 2 : Comparer plusieurs cryptos spécifiques ⭐ NOUVEAU
+
+**Situation :** Vous voulez comparer uniquement BTC, ETH et SOL en 1h
+
+**Commande :**
+```
+/crypto_compare timeframe:1h assets:BTC,ETH,SOL
+```
+
+**Le bot affiche :**
+- **Mode** : Sélection personnalisée (3 actifs)
+- Pour chaque crypto :
+  - Prix actuel
+  - Status (🟢 Haussier / 🔴 Baissier / 🟠 Neutre)
+  - Compression détectée (🔥 si oui)
+  - Écart entre les MA (%)
+- **Alertes** si compression importante détectée
+
+**Pourquoi c'est utile :**
+- Comparer uniquement vos positions ouvertes
+- Analyser un secteur spécifique (L1, DeFi, etc.)
+- Comparaison rapide sans toutes les cryptos configurées
+
+**Alternative - Comparer TOUTES les cryptos :**
+```
+/crypto_compare timeframe:1h
+```
+→ Affiche toutes les cryptos configurées (BTC, ETH, AVAX, ASTER, SOL, AAVE)
+
+### Exemple 3 : Analyser une crypto avec les MA
 
 **Situation :** Vous voulez savoir si BTC est en tendance haussière sur 4h
 
@@ -1100,7 +1186,7 @@ class YFinanceSymbolSearch:
 - 📈 Golden Cross si MA50 > MA200
 - 📉 Death Cross si MA50 < MA200
 
-### Exemple 3 : Surveiller les volumes automatiquement
+### Exemple 4 : Surveiller les volumes automatiquement
 
 **Configuration :**
 1. Le bot vérifie AUTOMATIQUEMENT les volumes toutes les 15 minutes
@@ -1119,7 +1205,7 @@ class YFinanceSymbolSearch:
 - 14:01 → Vous recevez une alerte Discord : "🔥 Volume critique détecté sur BTCUSDT"
 - Vous pouvez réagir rapidement à un potentiel mouvement de prix
 
-### Exemple 4 : Alertes MA automatiques
+### Exemple 5 : Alertes MA automatiques
 
 **Configuration :**
 1. Le bot surveille AUTOMATIQUEMENT les MA toutes les 60 minutes
@@ -1397,17 +1483,31 @@ Solution: Augmenter swap ou RAM
 
 ### ✅ Implémenté
 
+**Calculs de trading :**
 - ✅ Calculs de position (spot, levier, R/R, DCA)
+- ✅ **Calcul perte au SL + gain au TP** avec comparaison (nouveau !)
+- ✅ Prix de liquidation et scénarios P&L
+
+**Analyse technique :**
 - ✅ Analyse technique moyennes mobiles (2 systèmes)
 - ✅ Multi-timeframes (5m à 1d)
 - ✅ Support cryptos (Binance) et actions (Yahoo Finance)
+- ✅ **Comparaison sélective d'actifs** (nouveau !)
+  - Compare tous les actifs OU sélection personnalisée
+  - `/crypto_compare assets:BTC,ETH,SOL`
+  - `/stock_compare assets:AAPL,MSFT,SPX`
+
+**Alertes automatiques :**
 - ✅ Alertes automatiques volumes (toutes les 15 min)
 - ✅ Alertes automatiques MA (toutes les 60 min)
-- ✅ Recherche de symboles intégrée
 - ✅ Webhooks Discord pour notifications
-- ✅ Retry automatique Binance
 - ✅ Système de cooldown anti-spam
 - ✅ Warm-up mode pour alertes MA
+
+**Outils :**
+- ✅ Recherche de symboles intégrée (Binance + Yahoo Finance)
+- ✅ Retry automatique Binance
+- ✅ Ajout/suppression d'actifs en temps réel
 
 ### Priorité Haute
 

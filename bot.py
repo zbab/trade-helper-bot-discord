@@ -686,7 +686,7 @@ async def crypto_check(
     except Exception as e:
         await ctx.respond(f"❌ Erreur lors de l'analyse: {str(e)}")
 
-@bot.slash_command(name="crypto_compare", description="Comparer toutes les cryptos")
+@bot.slash_command(name="crypto_compare", description="Comparer des cryptos (toutes ou spécifiques)")
 async def crypto_compare(
     ctx,
     timeframe: str = discord.Option(
@@ -694,26 +694,56 @@ async def crypto_compare(
         description="Timeframe d'analyse",
         choices=["5m", "15m", "1h", "4h", "1d"],
         default="1d"
+    ),
+    assets: str = discord.Option(
+        str,
+        description="Cryptos à comparer (ex: BTC,ETH,SOL) - vide = toutes",
+        required=False,
+        default=None
     )
 ):
     await ctx.defer()
-    
+
     try:
-        cryptos = crypto_manager.get_all_cryptos()
-        
-        if len(cryptos) == 0:
+        all_cryptos = crypto_manager.get_all_cryptos()
+
+        if len(all_cryptos) == 0:
             await ctx.respond("❌ Aucune crypto configurée!")
             return
-        
+
+        # Déterminer quelles cryptos comparer
+        if assets:
+            # Mode spécifique : comparer uniquement les actifs demandés
+            requested_symbols = [s.strip().upper() for s in assets.split(',')]
+            cryptos = {}
+
+            for symbol in requested_symbols:
+                if symbol in all_cryptos:
+                    cryptos[symbol] = all_cryptos[symbol]
+                else:
+                    await ctx.respond(f"❌ Crypto '{symbol}' non trouvée dans la configuration!\n"
+                                    f"💡 Cryptos disponibles: {', '.join(all_cryptos.keys())}")
+                    return
+
+            if len(cryptos) == 0:
+                await ctx.respond("❌ Aucune crypto valide spécifiée!")
+                return
+        else:
+            # Mode global : comparer toutes les cryptos
+            cryptos = all_cryptos
+
         timeframe_label = crypto_analyzer.get_interval_label(timeframe)
-        
+
+        comparison_mode = "Sélection personnalisée" if assets else "Toutes les cryptos"
+
         embed = discord.Embed(
             title=f"📊 Comparaison Cryptos ({timeframe_label})",
+            description=f"**Mode:** {comparison_mode} | **Actifs:** {len(cryptos)}",
             color=discord.Color.blue()
         )
-        
+
         alerts = []
-        
+
         for symbol, binance_symbol in cryptos.items():
             try:
                 analysis = crypto_analyzer.analyze_symbol(binance_symbol, interval=timeframe)
@@ -1177,7 +1207,7 @@ async def stock_check(
     except Exception as e:
         await ctx.respond(f"❌ Erreur lors de l'analyse: {str(e)}")
 
-@bot.slash_command(name="stock_compare", description="Comparer tous les stocks/indices")
+@bot.slash_command(name="stock_compare", description="Comparer des stocks/indices (tous ou spécifiques)")
 async def stock_compare(
     ctx,
     timeframe: str = discord.Option(
@@ -1185,26 +1215,56 @@ async def stock_compare(
         description="Timeframe d'analyse",
         choices=["5m", "15m", "1h", "4h", "1d"],
         default="1d"
+    ),
+    assets: str = discord.Option(
+        str,
+        description="Stocks à comparer (ex: AAPL,MSFT,SPX) - vide = tous",
+        required=False,
+        default=None
     )
 ):
     await ctx.defer()
-    
+
     try:
-        stocks = stock_manager.get_all_stocks()
-        
-        if len(stocks) == 0:
+        all_stocks = stock_manager.get_all_stocks()
+
+        if len(all_stocks) == 0:
             await ctx.respond("❌ Aucun stock configuré!")
             return
-        
+
+        # Déterminer quels stocks comparer
+        if assets:
+            # Mode spécifique : comparer uniquement les actifs demandés
+            requested_symbols = [s.strip().upper() for s in assets.split(',')]
+            stocks = {}
+
+            for symbol in requested_symbols:
+                if symbol in all_stocks:
+                    stocks[symbol] = all_stocks[symbol]
+                else:
+                    await ctx.respond(f"❌ Stock '{symbol}' non trouvé dans la configuration!\n"
+                                    f"💡 Stocks disponibles: {', '.join(all_stocks.keys())}")
+                    return
+
+            if len(stocks) == 0:
+                await ctx.respond("❌ Aucun stock valide spécifié!")
+                return
+        else:
+            # Mode global : comparer tous les stocks
+            stocks = all_stocks
+
         timeframe_label = stock_analyzer.get_interval_label(timeframe)
-        
+
+        comparison_mode = "Sélection personnalisée" if assets else "Tous les stocks"
+
         embed = discord.Embed(
             title=f"📊 Comparaison Stocks ({timeframe_label})",
+            description=f"**Mode:** {comparison_mode} | **Actifs:** {len(stocks)}",
             color=discord.Color.blue()
         )
-        
+
         alerts = []
-        
+
         for symbol, yfinance_symbol in stocks.items():
             try:
                 analysis = stock_analyzer.analyze_symbol(yfinance_symbol, interval=timeframe)
@@ -1789,7 +1849,8 @@ async def help_command(ctx):
         value=(
             "`/crypto_check <crypto> [timeframe]` - Analyser les MA\n"
             "  └ Timeframes: 5m, 15m, 1h, 4h, 1d\n"
-            "`/crypto_compare [timeframe]` - Comparer toutes les cryptos\n"
+            "`/crypto_compare [timeframe] [assets]` - Comparer cryptos 🆕\n"
+            "  └ Sans assets: toutes | Avec: BTC,ETH,SOL\n"
             "`/crypto_list` - Lister les cryptos\n"
             "`/crypto_search <terme>` - Rechercher un symbole 🔍\n"
             "`/crypto_add <symbol>` - Ajouter (auto-détection) 🆕\n"
@@ -1804,7 +1865,8 @@ async def help_command(ctx):
         value=(
             "`/stock_check <stock> [timeframe]` - Analyser les MA\n"
             "  └ Timeframes: 5m, 15m, 1h, 4h, 1d\n"
-            "`/stock_compare [timeframe]` - Comparer tous les stocks\n"
+            "`/stock_compare [timeframe] [assets]` - Comparer stocks 🆕\n"
+            "  └ Sans assets: tous | Avec: AAPL,MSFT,SPX\n"
             "`/stock_list` - Lister les stocks\n"
             "`/stock_search <terme>` - Rechercher un symbole 🔍\n"
             "`/stock_add <symbol>` - Ajouter (auto-détection) 🆕\n"
@@ -1845,12 +1907,13 @@ async def help_command(ctx):
             "**Calculs:**\n"
             "`/leverage capital:10000 leverage_amount:10 risk_percent:2 entry:50000 stop_loss:49000 target:52000`\n"
             "  → Calcul complet avec perte SL + gain TP\n\n"
+            "**Comparaison:**\n"
+            "`/crypto_compare timeframe:4h` → Toutes\n"
+            "`/crypto_compare timeframe:4h assets:BTC,ETH` → Sélection\n"
+            "`/stock_compare assets:AAPL,MSFT,SPX` → Tech stocks\n\n"
             "**Recherche + Ajout:**\n"
             "`/crypto_search doge` → Trouver DOGEUSDT\n"
             "`/crypto_add symbol:DOGE` → Ajout auto ✨\n\n"
-            "**Analyse:**\n"
-            "`/crypto_check crypto:BTC timeframe:1h`\n"
-            "`/stock_check stock:AAPL timeframe:1d`\n\n"
             "**Surveillance:**\n"
             "`/volume_status` → État des volumes\n"
             "`/ma_alerts_test` → Test alertes MA"
