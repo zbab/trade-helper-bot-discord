@@ -8,7 +8,7 @@
 
 ---
 
-## 📋 TABLEQuest DES MATIÈRES
+## 📋 TABLE DES MATIÈRES
 
 1. [Vue d'ensemble](#vue-densemble)
 2. [Architecture](#architecture)
@@ -17,7 +17,42 @@
 5. [Modules Techniques](#modules-techniques)
 6. [Déploiement & Production](#déploiement--production)
 7. [Maintenance & Monitoring](#maintenance--monitoring)
-8. [Roadmap & Évolutions](#roadmap--évolutions)
+8. [Actifs Configurés](#actifs-configurés)
+9. [Configuration des Alertes](#configuration-des-alertes)
+10. [Roadmap & Évolutions](#roadmap--évolutions)
+
+---
+
+## ⚡ RÉSUMÉ RAPIDE
+
+**Trade Helper Bot** est un assistant Discord automatisé pour traders, offrant :
+
+🧮 **Calculs de Trading**
+- Position sizing (spot & levier jusqu'à 125x)
+- Calcul R/R et DCA
+- Liquidation et P&L
+
+📊 **Analyse Technique**
+- 12 moyennes mobiles (MA13 à MA750)
+- Multi-timeframes (5m à 1d)
+- Détection croisements, alignements, compressions
+
+🔔 **Alertes Automatiques**
+- Volume : surveillance toutes les 15 min
+- MA : surveillance toutes les 60 min
+- Webhooks Discord configurables
+- Cooldown anti-spam
+
+📈 **Assets Supportés**
+- 6 cryptos (Binance) : BTC, ETH, AVAX, ASTER, SOL, AAVE
+- 4 stocks (Yahoo) : AAPL, MSFT, SPX, TTE
+- Ajout/suppression en temps réel
+
+🔧 **Production Ready**
+- Retry automatique Binance
+- Warm-up mode (1h) pour alertes
+- Systemd service inclus
+- RAM optimisée (<200MB)
 
 ---
 
@@ -25,7 +60,7 @@
 
 ### Description
 
-**Trade Helper Bot** est un bot Discord en Python conçu pour assister les traders dans leurs calculs de position et l'analyse technique des cryptomonnaies et actions.
+**Trade Helper Bot** est un bot Discord en Python conçu pour assister les traders dans leurs calculs de position et l'analyse technique des cryptomonnaies et actions, avec un système d'alertes automatiques pour les signaux techniques et les variations de volume.
 
 ### Fonctionnalités Principales
 
@@ -40,11 +75,19 @@
 - **Détection de croisements** : Golden Cross, Death Cross, croisements multiples
 - **Compression des MA** : Détection de volatilité imminente
 - **Position du prix** : Prix vs toutes les MA
+- **Multi-timeframes** : 5m, 15m, 1h, 4h, 1d
+
+#### 🔔 Alertes Automatiques
+- **Alertes MA** : Surveillance continue des croisements et alignements (toutes les 60 minutes)
+- **Alertes Volume** : Détection des pics de volume anormaux (toutes les 15 minutes)
+- **Webhooks Discord** : Notifications automatiques via webhooks configurables
+- **Système de cooldown** : Prévention du spam avec délais paramétrables
 
 #### 🔧 Gestion Dynamique
-- **Ajout/Suppression de cryptos** : Gestion en temps réel
-- **Validation Binance** : Vérification automatique des symboles
-- **Multi-timeframes** : 5m, 15m, 1h, 4h, 1d
+- **Ajout/Suppression de cryptos/actions** : Gestion en temps réel
+- **Recherche de symboles** : Recherche Binance et Yahoo Finance intégrée
+- **Validation automatique** : Vérification des symboles sur les plateformes
+- **Retry automatique** : Reconnexion automatique à Binance en cas de déconnexion
 
 ### Technologies
 
@@ -63,10 +106,13 @@
 
 ```
 trade-helper-bot-discord/
-├── bot.py                    # Point d'entrée principal
-├── market_analysis.py        # Analyseur de marché Binance
+├── bot.py                    # Point d'entrée principal + commandes Discord
+├── market_analysis.py        # Analyseurs Binance & Yahoo Finance
 ├── crypto_manager.py         # Gestionnaire de cryptos
 ├── stock_manager.py          # Gestionnaire d'actions
+├── volume_monitor.py         # Surveillance des volumes (alertes automatiques)
+├── ma_alerts.py              # Surveillance des MA (alertes automatiques)
+├── symbol_search.py          # Recherche de symboles Binance & Yahoo Finance
 ├── ma_alerts_config.json     # Configuration alertes MA
 ├── volume_config.json        # Configuration alertes volume
 ├── cryptos.json              # Liste des cryptos surveillées
@@ -80,39 +126,81 @@ trade-helper-bot-discord/
 
 #### 1. **bot.py**
 - Initialisation du bot Discord
-- Gestion des commandes slash
+- Gestion des commandes slash (position, leverage, rr, dca, crypto_*, stock_*)
 - Orchestration des modules
+- Background tasks (volume_check, ma_alert_check)
 
 **Imports principaux:**
 ```python
 import discord
-from discord.ext import commands
-from market_analysis import BinanceMarketAnalyzer
+from discord.ext import commands, tasks
+from market_analysis import BinanceMarketAnalyzer, YFinanceMarketAnalyzer
 from crypto_manager import CryptoManager
+from stock_manager import StockManager
+from volume_monitor import VolumeMonitor
+from ma_alerts import MAAlertMonitor
+from symbol_search import BinanceSymbolSearch, YFinanceSymbolSearch
 ```
 
 #### 2. **market_analysis.py**
-- Classe `BinanceMarketAnalyzer`
-- Connexion API Binance
-- Calcul des moyennes mobiles
-- Détection de signaux
+- Classes `BinanceMarketAnalyzer` et `YFinanceMarketAnalyzer`
+- Connexion API Binance et Yahoo Finance
+- Calcul des moyennes mobiles (SMA)
+- Détection de signaux techniques
 
 **Fonctionnalités:**
 - `analyze_symbol()` - Analyse complète d'un actif
 - `get_ma_values()` - Calcul des MA
 - `detect_crossovers()` - Détection croisements
-- `test_symbol_exists()` - Validation Binance
+- `test_symbol_exists()` - Validation symbole
+- Retry automatique avec Binance en cas de déconnexion
 
-#### 3. **crypto_manager.py**
-- Classe `CryptoManager`
-- Gestion du fichier cryptos.json
-- Validation des symboles Binance
+#### 3. **crypto_manager.py** & **stock_manager.py**
+- Classes `CryptoManager` et `StockManager`
+- Gestion des fichiers cryptos.json et stocks.json
+- Validation des symboles
 
 **Méthodes:**
-- `add_crypto()` - Ajouter une crypto
-- `remove_crypto()` - Supprimer une crypto
-- `get_all_cryptos()` - Lister toutes
-- `crypto_exists()` - Vérifier existence
+- `add_crypto()/add_stock()` - Ajouter un actif
+- `remove_crypto()/remove_stock()` - Supprimer un actif
+- `get_all_cryptos()/get_all_stocks()` - Lister tous
+- `crypto_exists()/stock_exists()` - Vérifier existence
+
+#### 4. **volume_monitor.py**
+- Classe `VolumeMonitor`
+- Surveillance automatique des pics de volume (toutes les 15 minutes par défaut)
+- Détection de volumes anormaux (>150%, >200%, >300%)
+- Cooldown pour éviter le spam (30 minutes par défaut)
+- Support webhooks Discord
+
+**Méthodes:**
+- `check_volumes()` - Vérification des volumes
+- `send_volume_alert()` - Envoi d'alertes
+- Configuration via volume_config.json
+
+#### 5. **ma_alerts.py**
+- Classe `MAAlertMonitor`
+- Surveillance automatique des MA (toutes les 60 minutes par défaut)
+- Détection Golden/Death Cross, alignements, compressions
+- Warm-up mode (1h) pour éviter les faux signaux au démarrage
+- Cooldown (4 heures par défaut) pour chaque actif
+- Support webhooks Discord séparés (cross, alignment, compression)
+
+**Méthodes:**
+- `check_alerts()` - Vérification des signaux
+- `detect_golden_death_cross()` - Détection croisements 50/200
+- `send_webhook_alert()` - Envoi via webhook
+- Configuration via ma_alerts_config.json
+
+#### 6. **symbol_search.py**
+- Classes `BinanceSymbolSearch` et `YFinanceSymbolSearch`
+- Recherche de symboles sur Binance et Yahoo Finance
+- Autocomplétion Discord intégrée
+
+**Méthodes:**
+- `search()` - Recherche de symboles
+- Priorité aux paires USDT pour Binance
+- Fallback testing pour Yahoo Finance
 
 ### Système de Moyennes Mobiles
 
@@ -224,7 +312,11 @@ DISCORD_TOKEN=votre_token_discord_ici
 ```json
 {
   "BTC": "BTCUSDT",
-  "ETH": "ETHUSDT"
+  "ETH": "ETHUSDT",
+  "AVAX": "AVAXUSDT",
+  "ASTER": "ASTERUSDT",
+  "SOL": "SOLUSDT",
+  "AAVE": "AAVEUSDT"
 }
 ```
 
@@ -232,26 +324,33 @@ DISCORD_TOKEN=votre_token_discord_ici
 ```json
 {
   "AAPL": "AAPL",
-  "MSFT": "MSFT"
+  "MSFT": "MSFT",
+  "SPX": "^GSPC",
+  "TTE": "TTE"
 }
 ```
 
 **ma_alerts_config.json:**
 ```json
 {
-  "check_interval_minutes": 360,
-  "cooldown_hours": 6,
-  "compression_threshold": 3.0,
+  "check_interval_minutes": 60,
+  "cooldown_hours": 4,
+  "compression_threshold": 5.0,
   "assets": {
-    "crypto": ["BTCUSDT", "ETHUSDT"],
-    "stocks": []
+    "crypto": ["BTCUSDT", "ETHUSDT", "AVAXUSDT", "ASTERUSDT", "SOLUSDT", "AAVEUSDT"],
+    "stocks": ["AAPL", "MSFT", "^GSPC", "TTE"]
   },
-  "timeframes": ["1d"],
+  "timeframes": ["15m", "1h", "4h", "1d"],
   "alert_types": {
     "golden_cross": true,
     "death_cross": true,
-    "alignment": false,
-    "compression": false
+    "alignment": true,
+    "compression": true
+  },
+  "webhooks": {
+    "cross": "https://discord.com/api/webhooks/...",
+    "alignment": "https://discord.com/api/webhooks/...",
+    "compression": "https://discord.com/api/webhooks/..."
   }
 }
 ```
@@ -259,21 +358,22 @@ DISCORD_TOKEN=votre_token_discord_ici
 **volume_config.json:**
 ```json
 {
-  "check_interval_minutes": 120,
-  "cooldown_minutes": 120,
+  "check_interval_minutes": 15,
+  "cooldown_minutes": 30,
   "thresholds": {
-    "moderate": 200,
-    "high": 300,
-    "critical": 400
+    "moderate": 150,
+    "high": 200,
+    "critical": 300
   },
   "reference_periods": {
     "short": 25,
     "long": 300
   },
   "assets": {
-    "crypto": ["BTCUSDT", "ETHUSDT"],
-    "stocks": []
-  }
+    "crypto": ["BTCUSDT", "ETHUSDT", "AVAXUSDT", "ASTERUSDT", "SOLUSDT", "AAVEUSDT"],
+    "stocks": ["AAPL", "MSFT", "^GSPC", "TTE"]
+  },
+  "webhook_url": "https://discord.com/api/webhooks/..."
 }
 ```
 
@@ -290,6 +390,36 @@ Voir section [Déploiement](#déploiement--production)
 ---
 
 ## 💬 COMMANDES DISPONIBLES
+
+### Tableau Récapitulatif
+
+| Catégorie | Commande | Description |
+|-----------|----------|-------------|
+| **Calculs** | `/position` | Calcul position spot |
+| | `/leverage` | Calcul position avec levier |
+| | `/rr` | Ratio Risk/Reward |
+| | `/dca` | Dollar Cost Averaging |
+| **Crypto** | `/crypto_check` | Analyser une crypto |
+| | `/crypto_compare` | Comparer toutes les cryptos |
+| | `/crypto_list` | Lister cryptos configurées |
+| | `/crypto_add` | Ajouter une crypto |
+| | `/crypto_remove` | Supprimer une crypto |
+| | `/crypto_search` | Rechercher sur Binance |
+| **Stock** | `/stock_check` | Analyser une action |
+| | `/stock_compare` | Comparer toutes les actions |
+| | `/stock_list` | Lister actions configurées |
+| | `/stock_add` | Ajouter une action |
+| | `/stock_remove` | Supprimer une action |
+| | `/stock_search` | Rechercher sur Yahoo Finance |
+| **Volume** | `/volume_status` | État monitoring volume |
+| | `/volume_config` | Config alertes volume |
+| | `/volume_test` | Test immédiat volume |
+| **Alertes MA** | `/ma_alerts_status` | État monitoring MA |
+| | `/ma_alerts_config` | Config alertes MA |
+| | `/ma_alerts_test` | Test immédiat MA |
+| **Aide** | `/help` | Afficher toutes les commandes |
+
+---
 
 ### Catégorie 1: Calculs de Position
 
@@ -468,7 +598,17 @@ Voir section [Déploiement](#déploiement--production)
 **Description:** Rechercher un symbole sur Binance
 
 **Paramètres:**
-- `terme` : Terme de recherche
+- `search_term` : Terme de recherche (ex: SOL, AVAX, BNB)
+
+**Exemple:**
+```
+/crypto_search search_term:SOL
+```
+
+**Résultat:**
+- Liste des symboles Binance correspondants
+- Priorité aux paires USDT
+- Maximum 25 résultats
 
 ---
 
@@ -493,12 +633,106 @@ Voir section [Déploiement](#déploiement--production)
 
 ---
 
-#### /stock_add / /stock_remove / /stock_search
-*Fonctionnent comme les commandes crypto équivalentes*
+#### /stock_add
+**Description:** Ajouter une nouvelle action
+
+**Paramètres:**
+- `symbol` : Symbole court (ex: TSLA)
+- `yfinance_symbol` : Symbole Yahoo Finance (ex: TSLA)
+
+**Exemple:**
+```
+/stock_add symbol:TSLA yfinance_symbol:TSLA
+```
 
 ---
 
-### Catégorie 4: Configuration & Aide
+#### /stock_remove
+**Description:** Supprimer une action
+
+**Paramètres:**
+- `stock` : Symbole à supprimer
+
+---
+
+#### /stock_search
+**Description:** Rechercher un symbole Yahoo Finance
+
+**Paramètres:**
+- `search_term` : Terme de recherche (ex: TESLA, APPLE)
+
+---
+
+### Catégorie 4: Alertes Volume
+
+#### /volume_status
+**Description:** Voir l'état actuel du monitoring de volume
+
+**Résultat:**
+- État du monitoring (actif/inactif)
+- Dernière vérification
+- Nombre d'alertes envoyées
+- Prochaine vérification programmée
+
+---
+
+#### /volume_config
+**Description:** Afficher la configuration des alertes volume
+
+**Résultat:**
+- Intervalle de vérification (15 minutes par défaut)
+- Seuils de détection (150%, 200%, 300%)
+- Périodes de référence (MA25, MA300)
+- Cooldown (30 minutes)
+- Liste des actifs surveillés
+
+---
+
+#### /volume_test
+**Description:** Lancer une vérification immédiate des volumes
+
+**Résultat:**
+- Analyse instantanée de tous les actifs configurés
+- Alertes si volumes anormaux détectés
+
+---
+
+### Catégorie 5: Alertes MA (Moyennes Mobiles)
+
+#### /ma_alerts_status
+**Description:** Voir l'état du monitoring MA
+
+**Résultat:**
+- État du monitoring (actif/inactif/warm-up)
+- Dernière vérification
+- Alertes récentes
+- Prochaine vérification
+
+---
+
+#### /ma_alerts_config
+**Description:** Afficher la configuration des alertes MA
+
+**Résultat:**
+- Intervalle de vérification (60 minutes par défaut)
+- Timeframes surveillés (15m, 1h, 4h, 1d)
+- Types d'alertes activés (golden/death cross, alignments, compression)
+- Cooldown (4 heures)
+- Seuil de compression (5%)
+- URLs des webhooks configurés
+
+---
+
+#### /ma_alerts_test
+**Description:** Lancer une vérification immédiate des MA
+
+**Résultat:**
+- Analyse instantanée de tous les actifs configurés
+- Alertes si signaux détectés
+
+---
+
+### Catégorie 6: Configuration & Aide
 
 #### /help
 **Description:** Afficher toutes les commandes disponibles
@@ -510,27 +744,18 @@ Voir section [Déploiement](#déploiement--production)
 
 ---
 
-#### /ma_alerts_config
-**Description:** Voir la configuration des alertes MA
-
----
-
-#### /volume_config
-**Description:** Voir la configuration des alertes volume
-
----
-
 ## 🔧 MODULES TECHNIQUES
 
-### BinanceMarketAnalyzer
+### BinanceMarketAnalyzer & YFinanceMarketAnalyzer
 
 **Localisation:** `market_analysis.py`
 
 **Responsabilités:**
-- Connexion à l'API Binance
+- Connexion aux APIs Binance et Yahoo Finance
 - Récupération des données OHLCV
-- Calcul des moyennes mobiles
+- Calcul des moyennes mobiles (SMA)
 - Détection de signaux techniques
+- Retry automatique en cas de déconnexion
 
 **Méthodes Principales:**
 
@@ -538,15 +763,16 @@ Voir section [Déploiement](#déploiement--production)
 class BinanceMarketAnalyzer:
     def __init__(self):
         self.client = Client()  # Client Binance public
-        
+        self._setup_retry_connection()  # Reconnexion automatique
+
     def analyze_symbol(self, symbol: str, interval: str = '1d') -> Dict:
         """
         Analyse complète d'un symbole
-        
+
         Args:
             symbol: Symbole Binance (ex: BTCUSDT)
             interval: Timeframe (5m, 15m, 1h, 4h, 1d)
-            
+
         Returns:
             dict: {
                 'status': 'success' | 'error',
@@ -559,26 +785,160 @@ class BinanceMarketAnalyzer:
                 'crossovers': list
             }
         """
-        
+
     def get_ma_values(self, prices: list, periods: list) -> dict:
-        """Calcule les moyennes mobiles"""
-        
+        """Calcule les moyennes mobiles (SMA)"""
+
     def detect_crossovers(self, current_ma: dict, previous_ma: dict) -> list:
         """Détecte les croisements de MA"""
-        
+
     def test_symbol_exists(self, symbol: str) -> bool:
         """Vérifie si un symbole existe sur Binance"""
+
+class YFinanceMarketAnalyzer:
+    """Même interface que BinanceMarketAnalyzer mais pour Yahoo Finance"""
+
+    def analyze_symbol(self, symbol: str, interval: str = '1d') -> Dict:
+        """Analyse complète d'une action/indice"""
 ```
 
 ---
 
-### CryptoManager
+### VolumeMonitor
 
-**Localisation:** `crypto_manager.py`
+**Localisation:** `volume_monitor.py`
 
 **Responsabilités:**
-- Gestion du fichier cryptos.json
-- CRUD des cryptos
+- Surveillance automatique des volumes (background task)
+- Détection de pics anormaux (>150%, >200%, >300%)
+- Cooldown pour éviter le spam
+- Envoi d'alertes via webhooks Discord
+
+**Méthodes Principales:**
+
+```python
+class VolumeMonitor:
+    def __init__(self, binance_analyzer, yfinance_analyzer, config_file='volume_config.json'):
+        self.config = self._load_config()
+        self.last_alert_time = {}  # Cooldown tracking
+
+    async def check_volumes(self):
+        """
+        Vérifie les volumes de tous les actifs configurés
+        Compare volume actuel vs moyennes historiques (MA25, MA300)
+        Envoie alertes si seuils dépassés
+        """
+
+    async def send_volume_alert(self, asset, volume_change, level):
+        """
+        Envoie une alerte volume via webhook Discord
+
+        Args:
+            asset: Symbole de l'actif
+            volume_change: Pourcentage de changement
+            level: 'moderate' | 'high' | 'critical'
+        """
+```
+
+**Configuration (volume_config.json):**
+```json
+{
+  "check_interval_minutes": 15,
+  "cooldown_minutes": 30,
+  "thresholds": {
+    "moderate": 150,  // +150% vs moyenne
+    "high": 200,      // +200% vs moyenne
+    "critical": 300   // +300% vs moyenne
+  },
+  "reference_periods": {
+    "short": 25,   // MA25
+    "long": 300    // MA300
+  },
+  "webhook_url": "https://discord.com/api/webhooks/..."
+}
+```
+
+---
+
+### MAAlertMonitor
+
+**Localisation:** `ma_alerts.py`
+
+**Responsabilités:**
+- Surveillance automatique des moyennes mobiles
+- Détection Golden/Death Cross (MA50/MA200)
+- Détection alignements haussiers/baissiers
+- Détection compressions (volatilité imminente)
+- Warm-up mode (1h) pour éviter faux signaux au démarrage
+- Cooldown (4h par défaut) par actif
+
+**Méthodes Principales:**
+
+```python
+class MAAlertMonitor:
+    def __init__(self, binance_analyzer, yfinance_analyzer, config_file='ma_alerts_config.json'):
+        self.config = self._load_config()
+        self.previous_ma_state = {}  # Pour détecter les changements
+        self.last_alert_time = {}    # Cooldown tracking
+        self.warmup_end_time = None  # Warm-up 1h
+
+    async def check_alerts(self):
+        """
+        Vérifie tous les actifs sur tous les timeframes configurés
+        Détecte: golden/death cross, alignments, compressions
+        Envoie alertes via webhooks Discord séparés
+        """
+
+    def detect_golden_death_cross(self, ma_values) -> dict:
+        """
+        Détecte Golden Cross (MA50 > MA200) et Death Cross (MA50 < MA200)
+
+        Returns:
+            dict: {'type': 'golden' | 'death' | None, 'ma50': float, 'ma200': float}
+        """
+
+    async def send_webhook_alert(self, alert_type, asset, timeframe, data):
+        """
+        Envoie alerte via webhook Discord
+
+        Args:
+            alert_type: 'cross' | 'alignment' | 'compression'
+            asset: Symbole
+            timeframe: 15m, 1h, 4h, 1d
+            data: Détails du signal
+        """
+```
+
+**Configuration (ma_alerts_config.json):**
+```json
+{
+  "check_interval_minutes": 60,
+  "cooldown_hours": 4,
+  "compression_threshold": 5.0,  // Écart <5% entre MA
+  "timeframes": ["15m", "1h", "4h", "1d"],
+  "alert_types": {
+    "golden_cross": true,
+    "death_cross": true,
+    "alignment": true,
+    "compression": true
+  },
+  "webhooks": {
+    "cross": "https://discord.com/api/webhooks/...",
+    "alignment": "https://discord.com/api/webhooks/...",
+    "compression": "https://discord.com/api/webhooks/..."
+  }
+}
+```
+
+---
+
+### CryptoManager & StockManager
+
+**Localisation:** `crypto_manager.py` et `stock_manager.py`
+
+**Responsabilités:**
+- Gestion des fichiers cryptos.json et stocks.json
+- CRUD des actifs
 - Validation des symboles
 
 **Méthodes Principales:**
@@ -588,33 +948,61 @@ class CryptoManager:
     def __init__(self, file_path: str = 'cryptos.json'):
         self.file_path = file_path
         self.cryptos = self._load_cryptos()
-        
+
     def add_crypto(self, symbol: str, binance_symbol: str) -> bool:
-        """Ajoute une crypto"""
-        
+        """Ajoute une crypto avec validation"""
+
     def remove_crypto(self, symbol: str) -> bool:
         """Supprime une crypto"""
-        
+
     def get_all_cryptos(self) -> dict:
         """Retourne toutes les cryptos"""
-        
+
     def get_binance_symbol(self, symbol: str) -> str:
         """Récupère le symbole Binance"""
-        
+
     def crypto_exists(self, symbol: str) -> bool:
         """Vérifie l'existence"""
-        
+
     def validate_binance_symbol(self, symbol: str) -> bool:
         """Valide le format d'un symbole Binance"""
+
+# StockManager a la même interface pour les actions
 ```
 
-**Format cryptos.json:**
-```json
-{
-  "BTC": "BTCUSDT",
-  "ETH": "ETHUSDT",
-  "SOL": "SOLUSDT"
-}
+---
+
+### BinanceSymbolSearch & YFinanceSymbolSearch
+
+**Localisation:** `symbol_search.py`
+
+**Responsabilités:**
+- Recherche de symboles sur Binance et Yahoo Finance
+- Autocomplétion Discord
+- Priorité aux paires USDT (Binance)
+
+**Méthodes Principales:**
+
+```python
+class BinanceSymbolSearch:
+    def __init__(self):
+        self.client = Client()
+        self.symbols_cache = None
+
+    def search(self, search_term: str, limit: int = 25) -> List[str]:
+        """
+        Recherche symboles Binance
+        Priorité: paires USDT
+
+        Returns:
+            List des symboles correspondants (max 25)
+        """
+
+class YFinanceSymbolSearch:
+    """Recherche Yahoo Finance avec fallback testing"""
+
+    def search(self, search_term: str) -> List[str]:
+        """Recherche par mapping puis testing"""
 ```
 
 ---
@@ -813,49 +1201,138 @@ Solution: Augmenter swap ou RAM
 
 ---
 
+## 📊 ACTIFS CONFIGURÉS
+
+### Cryptomonnaies (6 actifs)
+
+| Symbole | Binance Symbol | Description |
+|---------|----------------|-------------|
+| BTC | BTCUSDT | Bitcoin |
+| ETH | ETHUSDT | Ethereum |
+| AVAX | AVAXUSDT | Avalanche |
+| ASTER | ASTERUSDT | Aster |
+| SOL | SOLUSDT | Solana |
+| AAVE | AAVEUSDT | Aave |
+
+**Données:** Binance API (temps réel)
+**Timeframes:** 5m, 15m, 1h, 4h, 1d
+
+### Actions/Indices (4 actifs)
+
+| Symbole | Yahoo Finance | Description |
+|---------|---------------|-------------|
+| AAPL | AAPL | Apple Inc. |
+| MSFT | MSFT | Microsoft Corporation |
+| SPX | ^GSPC | S&P 500 Index |
+| TTE | TTE | TotalEnergies SE |
+
+**Données:** Yahoo Finance
+**Timeframes:** 1d, 1w, 1mo
+
+**Note:** Vous pouvez ajouter/supprimer des actifs en temps réel via les commandes `/crypto_add`, `/crypto_remove`, `/stock_add`, `/stock_remove`.
+
+---
+
+## 🔔 CONFIGURATION DES ALERTES
+
+### Alertes Volume
+- **Fréquence:** Toutes les 15 minutes
+- **Seuils:** +150% (modéré), +200% (élevé), +300% (critique)
+- **Référence:** MA25 et MA300
+- **Cooldown:** 30 minutes entre alertes
+
+### Alertes MA (Moyennes Mobiles)
+- **Fréquence:** Toutes les 60 minutes
+- **Timeframes surveillés:** 15m, 1h, 4h, 1d
+- **Types d'alertes:**
+  - Golden Cross (MA50 > MA200)
+  - Death Cross (MA50 < MA200)
+  - Alignements haussiers/baissiers
+  - Compressions (écart <5% entre MA)
+- **Cooldown:** 4 heures par actif
+- **Warm-up:** 1 heure au démarrage (prévention faux signaux)
+
+### Webhooks Discord
+- **Volume:** URL unique pour alertes volume
+- **MA Cross:** URL séparée pour croisements Golden/Death
+- **MA Alignment:** URL séparée pour alignements
+- **MA Compression:** URL séparée pour compressions
+
+---
+
 ## 🗺️ ROADMAP & ÉVOLUTIONS
+
+### ✅ Implémenté
+
+- ✅ Calculs de position (spot, levier, R/R, DCA)
+- ✅ Analyse technique moyennes mobiles (2 systèmes)
+- ✅ Multi-timeframes (5m à 1d)
+- ✅ Support cryptos (Binance) et actions (Yahoo Finance)
+- ✅ Alertes automatiques volumes (toutes les 15 min)
+- ✅ Alertes automatiques MA (toutes les 60 min)
+- ✅ Recherche de symboles intégrée
+- ✅ Webhooks Discord pour notifications
+- ✅ Retry automatique Binance
+- ✅ Système de cooldown anti-spam
+- ✅ Warm-up mode pour alertes MA
 
 ### Priorité Haute
 
 #### Bot de News/Veille
 - Agrégation automatique de news crypto/finance
 - Webhooks Discord pour alertes
-- Sources: CoinDesk, CoinTelegraph, Twitter
+- Sources: CoinDesk, CoinTelegraph, Twitter/X
+
+#### Gestion Avancée des Alertes
+- Interface de configuration via Discord
+- Personnalisation des seuils par actif
+- Historique des alertes envoyées
+- Statistiques d'alertes
 
 ### Priorité Moyenne
 
-#### Alertes Indicateurs Techniques
+#### Alertes Indicateurs Techniques Additionnels
 - RSI (Surachat/Survente)
 - MACD (Croisements)
 - Bollinger Bands
 - Fibonacci retracements
+- Volume Profile
 
 #### Backtesting
 - Test de stratégies sur données historiques
 - Calcul de performance
 - Rapports détaillés
+- Win rate et Sharpe ratio
+
+#### Multi-Timeframe Confluence
+- Analyse simultanée sur plusieurs TF
+- Score de confluence de signaux
+- Détection de divergences inter-TF
 
 ### Priorité Basse
 
-#### Multi-Timeframe Analysis
-- Analyse simultanée sur plusieurs TF
-- Confluence de signaux
-- Score de confiance
-
 #### Portfolio Tracking
 - Suivi de portefeuille en temps réel
-- P&L tracking
+- P&L tracking automatique
 - Calcul de performance
+- Rapports périodiques
 
 #### Interface Web
 - Dashboard de configuration
-- Visualisation des alertes
+- Visualisation graphique des MA
 - Historique des signaux
+- Gestion des actifs
 
-#### Alertes Telegram
+#### Alertes Multi-Plateformes
 - Notifications via Telegram
-- Multi-canal
-- Personnalisation
+- Support Slack
+- Email notifications
+- SMS (via Twilio)
+
+#### Machine Learning
+- Prédiction de prix basée sur ML
+- Détection de patterns avancés
+- Optimisation automatique des paramètres
 
 ---
 
