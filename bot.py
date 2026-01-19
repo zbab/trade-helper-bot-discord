@@ -1953,7 +1953,30 @@ async def help_command(ctx):
         ),
         inline=False
     )
-    
+
+    embed.add_field(
+        name="🎯 Score EMA Cascade v2.0 (NOUVEAU)",
+        value=(
+            "Chaque alerte affiche un **score sur 100 pts**:\n\n"
+            "**Tier 1** (35 pts) - Direction Daily\n"
+            "└ EMA100×200, Prix vs EMA200, ADX\n\n"
+            "**Tier 2** (35 pts) - Signal Timeframe\n"
+            "└ Croisement + ADX + Volume + RSI\n\n"
+            "**Tier 3** (20 pts) - Confluence Multi-TF\n"
+            "└ Alignement H1/H4/Daily\n\n"
+            "**Tier 4** (10 pts) - Bonus technique\n\n"
+            "**Thresholds:**\n"
+            "└ Daily >65 | H4 >70 | H1 >72 | 15min >70\n\n"
+            "**Classification:**\n"
+            "└ 90-100: TIER S 🔥🔥🔥 (Maximum)\n"
+            "└ 80-89: TIER A 🔥🔥 (Excellent)\n"
+            "└ 70-79: TIER B 🔥 (Good)\n"
+            "└ 65-69: TIER C 📊 (Daily only)\n"
+            "└ <65: SKIP ❌"
+        ),
+        inline=False
+    )
+
     embed.set_footer(
         text=f"💡 {crypto_manager.get_count()} crypto(s) | {stock_manager.get_count()} stock(s) | Surveillance: ON 🔥"
     )

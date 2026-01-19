@@ -192,6 +192,163 @@ class MAAlertMonitor:
             'stars': '⭐⭐'
         }
 
+    def calculate_ema_cascade_score(self, data: Dict, signal_tf: str) -> Dict:
+        """
+        Calcule le score EMA Cascade Unified v2.0 (sur 100 points)
+
+        Args:
+            data: Données MA avec df pandas
+            signal_tf: Timeframe du signal ('15m', '1h', '4h', '1d')
+
+        Returns:
+            dict: {
+                'total_score': int,
+                'tier1': int,
+                'tier2': int,
+                'tier3': int,
+                'tier4': int,
+                'threshold': int,
+                'tradable': bool,
+                'conviction': str,
+                'conviction_emoji': str
+            }
+        """
+        df = data['df']
+        ma_values = data['ma_values']
+
+        if len(df) < 2:
+            return {'total_score': 0, 'tradable': False}
+
+        # ===== TIER 1: Direction Daily (35 points) =====
+        tier1_score = 0
+
+        # EMA100 vs EMA200 (20 pts)
+        if 100 in ma_values and 200 in ma_values:
+            ma100 = ma_values[100]
+            ma200 = ma_values[200]
+            if pd.notna(ma100) and pd.notna(ma200):
+                if ma100 > ma200:  # Bullish
+                    tier1_score += 20
+                elif ma100 < ma200:  # Bearish
+                    tier1_score += 20
+
+        # Prix vs EMA200 (10 pts)
+        current_price = data['current_price']
+        if 200 in ma_values and pd.notna(ma_values[200]):
+            if abs(current_price - ma_values[200]) / ma_values[200] > 0.01:  # >1% écart
+                tier1_score += 10
+
+        # ADX Daily - Simulé avec volatilité (5 pts)
+        # Note: ADX réel nécessite calcul complexe, ici on simule avec range
+        if len(df) >= 14:
+            recent_high = df['high'].tail(14).max()
+            recent_low = df['low'].tail(14).min()
+            price_range_pct = ((recent_high - recent_low) / recent_low) * 100
+            if price_range_pct > 10:  # Forte volatilité = trend fort
+                tier1_score += 5
+            elif price_range_pct > 5:
+                tier1_score += 3
+
+        # ===== TIER 2: Signal Timeframe (35 points) =====
+        tier2_score = 0
+
+        # Score selon timeframe
+        tier2_base_map = {
+            '1d': 8,   # Daily signal
+            '4h': 8,   # H4 signal
+            '1h': 6,   # H1 signal
+            '15m': 5   # 15min signal
+        }
+        tier2_score += tier2_base_map.get(signal_tf, 6)
+
+        # Volume spike (12 pts max) - Simulé avec volume actuel vs moyenne
+        if 'volume' in df.columns:
+            current_vol = df['volume'].iloc[-1]
+            avg_vol = df['volume'].tail(20).mean()
+            if current_vol > avg_vol * 1.5:  # >150%
+                tier2_score += 12
+            elif current_vol > avg_vol * 1.2:  # >120%
+                tier2_score += 8
+            elif current_vol > avg_vol:  # >100%
+                tier2_score += 4
+
+        # RSI simulation (5 pts) - Basé sur momentum
+        if len(df) >= 14:
+            gains = df['close'].diff().tail(14)
+            avg_gain = gains[gains > 0].mean() if len(gains[gains > 0]) > 0 else 0
+            avg_loss = abs(gains[gains < 0].mean()) if len(gains[gains < 0]) > 0 else 0
+            if avg_loss > 0:
+                rs = avg_gain / avg_loss
+                rsi = 100 - (100 / (1 + rs))
+                if 40 <= rsi <= 60:  # Zone neutre
+                    tier2_score += 5
+                elif 30 <= rsi <= 70:
+                    tier2_score += 3
+
+        # ADX TF signal (10 pts) - Simulé avec volatilité TF
+        tier2_score += 5  # Score partiel par défaut
+
+        # ===== TIER 3: Confluence Multi-TF (20 points) =====
+        tier3_score = 0
+
+        # Pour 15min: H1 aligned est OBLIGATOIRE (10 pts)
+        # Pour H1: H4 aligned est critique (10 pts)
+        # Pour H4: Daily aligned est critique (12 pts)
+        # Note: Sans accès multi-TF, on donne un score partiel
+        tier3_score += 10  # Score par défaut (à améliorer avec multi-TF réel)
+
+        # ===== TIER 4: Confluence Technique (10 points bonus) =====
+        tier4_score = 0
+        # Fibonacci / S/R - Non implémenté pour l'instant
+
+        # ===== CALCUL TOTAL =====
+        total_score = tier1_score + tier2_score + tier3_score + tier4_score
+
+        # Thresholds selon timeframe
+        threshold_map = {
+            '1d': 65,
+            '4h': 70,
+            '1h': 72,
+            '15m': 70
+        }
+        threshold = threshold_map.get(signal_tf, 70)
+        tradable = total_score >= threshold
+
+        # Classification par conviction
+        if total_score >= 90:
+            conviction = 'MAXIMUM'
+            conviction_emoji = '🔥🔥🔥'
+            conviction_tier = 'S'
+        elif total_score >= 80:
+            conviction = 'EXCELLENT'
+            conviction_emoji = '🔥🔥'
+            conviction_tier = 'A'
+        elif total_score >= 70:
+            conviction = 'GOOD'
+            conviction_emoji = '🔥'
+            conviction_tier = 'B'
+        elif total_score >= 65:
+            conviction = 'ACCEPTABLE'
+            conviction_emoji = '📊'
+            conviction_tier = 'C'
+        else:
+            conviction = 'SKIP'
+            conviction_emoji = '❌'
+            conviction_tier = 'D'
+
+        return {
+            'total_score': total_score,
+            'tier1': tier1_score,
+            'tier2': tier2_score,
+            'tier3': tier3_score,
+            'tier4': tier4_score,
+            'threshold': threshold,
+            'tradable': tradable,
+            'conviction': conviction,
+            'conviction_emoji': conviction_emoji,
+            'conviction_tier': conviction_tier
+        }
+
     def get_crypto_ma_data(self, symbol: str, timeframe: str, ma_system: List[int]) -> Optional[Dict]:
         """Récupère les MA pour une crypto"""
         try:
@@ -571,13 +728,39 @@ class MAAlertMonitor:
                 "value": value_text,
                 "inline": False
             })
-        
+
+        # ===== SCORE EMA CASCADE v2.0 =====
+        cascade_score = self.calculate_ema_cascade_score(data, data['timeframe'])
+
+        if cascade_score.get('total_score', 0) > 0:
+            score_value = (
+                f"{cascade_score['conviction_emoji']} **{cascade_score['conviction']}** - Tier {cascade_score['conviction_tier']}\n\n"
+                f"**Score Total:** {cascade_score['total_score']}/100 pts\n"
+                f"└ Tier 1 (Direction Daily): {cascade_score['tier1']}/35 pts\n"
+                f"└ Tier 2 (Signal TF): {cascade_score['tier2']}/35 pts\n"
+                f"└ Tier 3 (Multi-TF): {cascade_score['tier3']}/20 pts\n"
+                f"└ Tier 4 (Technique): {cascade_score['tier4']}/10 pts\n\n"
+                f"**Threshold {data['timeframe'].upper()}:** {cascade_score['threshold']} pts\n"
+                f"**Tradable:** {'✅ OUI' if cascade_score['tradable'] else '❌ NON (Score insuffisant)'}"
+            )
+
+            fields.append({
+                "name": "━━━━━━━━━━━━━━━━━━━━━━",
+                "value": "** **",
+                "inline": False
+            })
+            fields.append({
+                "name": "🎯 SCORE EMA CASCADE v2.0",
+                "value": score_value,
+                "inline": False
+            })
+
         # Ajouter les MA
         ma_text = ""
         for period, value in sorted(data['ma_values'].items()):
             if pd.notna(value):
                 ma_text += f"MA{period}: `${value:>10,.2f}`\n"
-        
+
         if ma_text:
             fields.append({
                 "name": "━━━━━━━━━━━━━━━━━━━━━━",

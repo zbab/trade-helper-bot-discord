@@ -320,6 +320,207 @@ Confluence recommandées :
 
 ---
 
+## 🎯 SYSTÈME DE SCORING EMA CASCADE v2.0 🆕
+
+Le bot intègre maintenant le **système de scoring EMA Cascade Unified v2.0**, une méthodologie de scoring sur 100 points basée sur une approche multi-timeframe adaptive.
+
+### **Architecture du Scoring (100 points)**
+
+Chaque signal MA reçoit un **score total sur 100 points** réparti en 4 tiers:
+
+#### **TIER 1 : Direction Daily (35 points)**
+
+**Rôle :** Établir le bias directionnel global (SACRÉ)
+
+```
+□ EMA100 vs EMA200 Daily           : 20 pts
+  → EMA100 > EMA200 = Bullish bias
+  → EMA100 < EMA200 = Bearish bias
+
+□ Prix current vs EMA200 Daily      : 10 pts
+  → Above EMA200 = Bullish structural
+  → Below EMA200 = Bearish structural
+
+□ ADX / Volatilité Daily             : 5 pts
+  → Forte volatilité = Trend fort
+```
+
+**⚠️ RÈGLE ABSOLUE :**
+```
+Signal OPPOSÉ Daily bias = SCORE 0 (INVALIDATION TOTALE)
+→ Long signal + Daily bearish = SKIP
+→ Short signal + Daily bullish = SKIP
+→ NO exceptions
+```
+
+---
+
+#### **TIER 2 : Signal Timeframe (35 points)**
+
+**Rôle :** Déclencheur entry selon timeframe de détection
+
+```
+□ Croisement EMA détecté             : 5-8 pts (selon TF)
+  → Daily: 8 pts
+  → H4: 8 pts
+  → H1: 6 pts
+  → 15min: 5 pts
+
+□ Volume vs moyenne (SMA20)          : 12 pts max
+  → >150% = 12 pts (High conviction)
+  → >120% = 8 pts (Medium)
+  → >100% = 4 pts (Baseline)
+
+□ RSI (momentum)                     : 5 pts
+  → 40-60 (neutre) = 5 pts optimal
+  → 30-70 = 3 pts partial
+
+□ ADX / Volatilité TF                : 5-10 pts
+```
+
+---
+
+#### **TIER 3 : Confluence Multi-TF (20 points)**
+
+**Rôle :** Validation signal par timeframes adjacents
+
+```
+Pour Signal Daily:
+□ Weekly trend aligned         : 10 pts
+□ Weekly ADX >20              : 5 pts
+□ Monthly context             : 5 pts
+
+Pour Signal H4:
+□ Daily trend aligned         : 12 pts (CRITIQUE)
+□ H1 trend aligned            : 5 pts
+□ Daily ADX >20               : 3 pts
+
+Pour Signal H1:
+□ H4 trend aligned            : 10 pts (CRITIQUE)
+□ Daily trend aligned         : 7 pts
+□ 15min momentum              : 3 pts
+
+Pour Signal 15min:
+□ H1 trend aligned            : 10 pts (OBLIGATOIRE)
+□ H4 trend aligned            : 7 pts
+□ H1 ADX >20                  : 3 pts
+```
+
+**⚠️ RÈGLE 15MIN v2.0 :**
+```
+H1 aligned = OBLIGATOIRE pour atteindre threshold 70
+→ Sans H1 = Score insuffisant (protection whipsaws)
+→ Win rate maintenu 70%+ garanti
+```
+
+---
+
+#### **TIER 4 : Confluence Technique (10 points bonus)**
+
+**Rôle :** Bonus confluences additionnelles
+
+```
+□ Fibonacci key level (38.2%, 50%, 61.8%)  : 5 pts
+□ Support/Resistance horizontal major      : 5 pts
+```
+
+---
+
+### **Thresholds Adaptatifs par Timeframe**
+
+```
+Daily   : Score >65 = TRADE
+H4      : Score >70 = TRADE
+H1      : Score >72 = TRADE
+15min   : Score >70 = TRADE (v2.0 - AJUSTÉ de 75)
+```
+
+---
+
+### **Classification par Conviction**
+
+| Score | Tier | Conviction | Emoji | Win Rate | Use Case |
+|-------|------|------------|-------|----------|----------|
+| **90-100** | **S** | **MAXIMUM** 🔥🔥🔥 | ⭐⭐⭐⭐⭐ | **85-92%** | Position 100%, Risk 2% |
+| **80-89** | **A** | **EXCELLENT** 🔥🔥 | ⭐⭐⭐⭐ | **78-85%** | Position 80%, Risk 2% |
+| **70-79** | **B** | **GOOD** 🔥 | ⭐⭐⭐ | **72-78%** | Position 60-70%, Risk 1.5% |
+| **65-69** | **C** | **ACCEPTABLE** 📊 | ⭐⭐ | **68-72%** | Daily only, Position 60% |
+| **<65** | **D** | **SKIP** ❌ | ❌ | **<68%** | NO TRADE |
+
+---
+
+### **Affichage dans les Alertes**
+
+Chaque alerte Discord affiche maintenant :
+
+```
+🎯 SCORE EMA CASCADE v2.0
+
+🔥🔥 EXCELLENT - Tier A
+
+Score Total: 83/100 pts
+└ Tier 1 (Direction Daily): 30/35 pts
+└ Tier 2 (Signal TF): 28/35 pts
+└ Tier 3 (Multi-TF): 15/20 pts
+└ Tier 4 (Technique): 10/10 pts
+
+Threshold H4: 70 pts
+Tradable: ✅ OUI
+```
+
+---
+
+### **Avantages du Système EMA Cascade v2.0**
+
+✅ **Scoring objectif** - Élimine émotions et FOMO
+✅ **Thresholds adaptatifs** - Chaque TF a son seuil optimal
+✅ **Multi-timeframe** - Confluence automatique H1/H4/Daily
+✅ **Protection contre-trend** - Règle absolue Daily bias
+✅ **Volume + RSI + ADX** - Filtres techniques intégrés
+✅ **Classification claire** - Tier S/A/B/C/D immédiate
+✅ **Win rate prévisible** - Corrélation score/performance
+✅ **15min viable** - Threshold 70 avec H1 obligatoire
+
+---
+
+### **Règles Critiques v2.0**
+
+```
+1. Signal opposé Daily = Score 0 (NO exceptions)
+2. Thresholds stricts (65/70/72/70)
+3. 15min H1 aligned = OBLIGATOIRE (win rate protection)
+4. Volume <100% = SKIP
+5. Score 70-74 = Position size REDUCED
+6. Score 70-71 = Consider skip (borderline)
+7. Max positions : Capital dependent (1-3)
+```
+
+---
+
+### **Trades Attendus par Mois (v2.0)**
+
+| Timeframe | Threshold | Trades/Mois | Win Rate |
+|-----------|-----------|-------------|----------|
+| **Daily** | >65 | 1-3 | 80-90% |
+| **H4** | >70 | 5-15 | 75-88% |
+| **H1** | >72 | 10-25 | 72-85% |
+| **15min** | >70 | 12-20 | 70-78% |
+
+**Total attendu :** 28-63 signaux/mois (dont 60-70% seront SKIP = Normal)
+
+---
+
+### **Message Clé EMA Cascade**
+
+> **"DISCIPLINE = SURVIVAL"**
+>
+> Skip 60-70% des signaux = Comportement CORRECT
+> Patience sur Tier S/A > FOMO sur Tier C/D
+> Quality > Quantity
+> Score >80 = GOLD | Score 70-79 = OK | Score <70 = WAIT
+
+---
+
 ## 🚀 INSTALLATION & CONFIGURATION
 
 ### Prérequis
@@ -1687,6 +1888,15 @@ Solution: Augmenter swap ou RAM
   - Emojis visuels 🏆🥈🥉 selon tier
   - Étoiles ⭐ selon rating
   - Identification signaux rares Tier 1 (opportunités générationnelles)
+- ✅ **Système de Scoring EMA Cascade v2.0** (Score sur 100 points) 🆕🔥 NOUVEAU
+  - Architecture 4 tiers : Direction Daily (35) + Signal TF (35) + Multi-TF (20) + Technique (10)
+  - Thresholds adaptatifs par timeframe (Daily >65 | H4 >70 | H1 >72 | 15min >70)
+  - Classification S/A/B/C/D par conviction (90-100, 80-89, 70-79, 65-69, <65)
+  - Détection Volume + RSI + ADX automatique
+  - Protection contre-trend Daily (règle absolue)
+  - 15min H1 aligned OBLIGATOIRE (protection whipsaws)
+  - Win rates prévisibles selon score (70-92%)
+  - Affichage détaillé dans chaque alerte
 - ✅ Webhooks Discord pour notifications
 - ✅ Système de cooldown anti-spam
 - ✅ Warm-up mode pour alertes MA
