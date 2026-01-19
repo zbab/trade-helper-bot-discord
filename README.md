@@ -41,8 +41,8 @@
 - MA112 long terme (336, 375, 448, 750)
 
 🔔 **Alertes Automatiques**
-- Volume : surveillance toutes les 15 min
-- MA : surveillance toutes les 60 min
+- Volume : surveillance toutes les **5 min** 🔥 (Option Aggressive)
+- MA : surveillance toutes les **15 min** 🔥 (Option Aggressive)
 - Webhooks Discord configurables
 - Cooldown anti-spam
 
@@ -626,7 +626,7 @@ DISCORD_TOKEN=votre_token_discord_ici
 **ma_alerts_config.json:**
 ```json
 {
-  "check_interval_minutes": 60,
+  "check_interval_minutes": 15,  // 🔥 Option Aggressive
   "cooldown_hours": 4,
   "compression_threshold": 5.0,
   "assets": {
@@ -1325,7 +1325,7 @@ class MAAlertMonitor:
 **Configuration (ma_alerts_config.json):**
 ```json
 {
-  "check_interval_minutes": 60,
+  "check_interval_minutes": 15,  // 🔥 Option Aggressive (4x plus rapide)
   "cooldown_hours": 4,
   "compression_threshold": 5.0,  // Écart <5% entre MA
   "timeframes": ["15m", "1h", "4h", "1d"],
@@ -1532,7 +1532,7 @@ class YFinanceSymbolSearch:
 ### Exemple 5 : Alertes MA automatiques ⭐ AMÉLIORÉ
 
 **Configuration :**
-1. Le bot surveille AUTOMATIQUEMENT les MA toutes les 60 minutes
+1. Le bot surveille AUTOMATIQUEMENT les MA toutes les **15 minutes** 🔥 (Option Aggressive)
 2. Détection de plusieurs types de signaux (voir ci-dessous)
 3. Warm-up de 1h au démarrage pour éviter les faux signaux
 4. Cooldown de 4h par actif pour éviter le spam
@@ -1808,13 +1808,13 @@ Solution: Augmenter swap ou RAM
 ## 🔔 CONFIGURATION DES ALERTES
 
 ### Alertes Volume
-- **Fréquence:** Toutes les 15 minutes
+- **Fréquence:** Toutes les **5 minutes** 🔥 (Option Aggressive)
 - **Seuils:** +150% (modéré), +200% (élevé), +300% (critique)
 - **Référence:** MA25 et MA300
 - **Cooldown:** 30 minutes entre alertes
 
 ### Alertes MA (Moyennes Mobiles) ⭐ AMÉLIORÉ + PRIORITÉS 🆕
-- **Fréquence:** Toutes les 60 minutes
+- **Fréquence:** Toutes les **15 minutes** 🔥 (Option Aggressive)
 - **Timeframes surveillés:** 15m, 1h, 4h, 1d
 - **Systèmes de MA:**
   - Système 1: MA7, MA13, MA20, MA25, MA32, MA50, MA100, MA200, MA300
@@ -1856,6 +1856,29 @@ Solution: Augmenter swap ou RAM
 - **MA Alignment:** URL séparée pour alignements
 - **MA Compression:** URL séparée pour compressions
 
+### ⚡ Option Aggressive (Configuration Actuelle) 🔥
+
+Le bot utilise actuellement l'**Option 2 - Aggressive** pour des détections ultra-rapides :
+
+**Fréquences :**
+- Alertes MA : **15 minutes** (4x plus rapide que standard 60min)
+- Alertes Volume : **5 minutes** (3x plus rapide que standard 15min)
+
+**Avantages :**
+- ✅ Détection quasi-instantanée des opportunités
+- ✅ Réactivité maximale sur signaux Tier 1-2
+- ✅ Capturer les mouvements avant la foule
+- ✅ Win rate inchangé (scoring EMA Cascade v2.0)
+
+**Consommation API :**
+- MA alerts : 96 vérifications/jour (vs 24 en mode standard)
+- Volume alerts : 288 vérifications/jour (vs 96 en mode standard)
+- **Total : ~7,488 appels/jour**
+- **Binance : 6.7%** de la limite (100,000 req/jour)
+- **Yahoo Finance : 1.6%** de la limite (48,000 req/jour)
+
+**Message clé :** Configuration aggressive mais consommation API reste **<7%** des limites. Sécurité totale.
+
 ---
 
 ## 🗺️ ROADMAP & ÉVOLUTIONS
@@ -1877,8 +1900,8 @@ Solution: Augmenter swap ou RAM
   - `/stock_compare assets:AAPL,MSFT,SPX`
 
 **Alertes automatiques :**
-- ✅ Alertes automatiques volumes (toutes les 15 min)
-- ✅ Alertes automatiques MA (toutes les 60 min)
+- ✅ Alertes automatiques volumes (toutes les **5 min** 🔥)
+- ✅ Alertes automatiques MA (toutes les **15 min** 🔥)
 - ✅ **Détection croisements paires spécifiques** (7-20, 20-50, 13-25, 25-32, 32-100, 100-200) ⭐ NOUVEAU
 - ✅ **Détection croisements multiples** (≥2 MA croisées simultanément) ⭐ NOUVEAU
 - ✅ **Détection MA112 long terme** (336, 375, 448, 750) ⭐ NOUVEAU

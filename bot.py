@@ -1882,7 +1882,7 @@ async def help_command(ctx):
             "`/volume_status` - État actuel des volumes\n"
             "`/volume_config` - Configuration des alertes\n"
             "`/volume_test` - Tester la surveillance\n"
-            "└ Alertes auto toutes les 15min: BTC/ETH + MAG7"
+            "└ Alertes auto toutes les **5min** 🔥: BTC/ETH + MAG7"
         ),
         inline=False
     )
@@ -1930,6 +1930,7 @@ async def help_command(ctx):
         "`/ma_alerts_config` - Configuration\n"
         "`/ma_alerts_test` - Test immédiat\n"
         "`/ma_alerts_status` - Historique\n"
+        "└ Alertes auto toutes les **15min** 🔥\n"
         "└ 2 systèmes: Court (7-300) + Long (112-750)\n"
         "└ Paires: 7-20, 20-50, 13-25, 25-32, 32-100, 100-200\n"
         "└ MA112 avec: 336, 375, 448, 750\n"
