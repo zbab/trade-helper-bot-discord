@@ -1,5 +1,5 @@
 {
-  "check_interval_minutes": 60,
+  "check_interval_minutes": 15,
   "webhooks": {
     "compression": "https://discord.com/api/webhooks/1457297388946329612/u9rsKHqjVjroCc2vwFce5p_IB81Mn0dLpSqqjPFtKR8qavYf_jSesJlUNS6BXJ3KhEjW",
     "cross": "https://discord.com/api/webhooks/1457297388946329612/u9rsKHqjVjroCc2vwFce5p_IB81Mn0dLpSqqjPFtKR8qavYf_jSesJlUNS6BXJ3KhEjW",

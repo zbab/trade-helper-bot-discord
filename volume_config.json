@@ -1,5 +1,5 @@
 {
-  "check_interval_minutes": 15,
+  "check_interval_minutes": 5,
   "webhook_url": "https://discord.com/api/webhooks/1457297958235017288/H4LIHU4cnp8FppI_7Wv_TgvV9lKyuwQXpL0WKd6qlIJcepma1fu_4fJsg4XTJOYNelQk",
   "cooldown_minutes": 30,
   "thresholds": {
